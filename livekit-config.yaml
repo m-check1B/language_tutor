@@ -4,4 +4,4 @@ rtc:
   udp_port: 7882
   use_external_ip: true
 keys:
-  ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+  APlapzpsAPMeRH4: hB8vXsTX4Z5bANHliyJ7NoTw4PNoRsHaDZ8IJclaYfP
