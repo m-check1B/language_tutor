@@ -10,10 +10,23 @@ class Settings:
 
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
-    POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
-    POSTGRES_PORT: str = os.getenv("POSTGRES_PORT", 5432)
+    POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "db")  # Use "db" as the default host
+    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "language_tutor")
-    DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    
+    # Debug print statements
+    print(f"POSTGRES_USER: {POSTGRES_USER}")
+    print(f"POSTGRES_SERVER: {POSTGRES_SERVER}")
+    print(f"POSTGRES_PORT: {POSTGRES_PORT}")
+    print(f"POSTGRES_DB: {POSTGRES_DB}")
+    
+    # Updated DATABASE_URL construction with error handling
+    try:
+        DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER}:{POSTGRES_PORT}/{POSTGRES_DB}"
+        print(f"DATABASE_URL: {DATABASE_URL}")
+    except Exception as e:
+        print(f"Error constructing DATABASE_URL: {e}")
+        DATABASE_URL = None
 
     # JWT settings
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key")

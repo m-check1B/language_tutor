@@ -10,7 +10,7 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   backend:
     build: ./backend
@@ -20,11 +20,18 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
-      - BACKEND_SECRET_KEY=${BACKEND_SECRET_KEY}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_SERVER=db
+      - POSTGRES_PORT=${DB_PORT}
+      - POSTGRES_DB=${DB_NAME}
+      - SECRET_KEY=${BACKEND_SECRET_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - LIVEKIT_API_URL=${LIVEKIT_URL}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     depends_on:
       - db
 
@@ -37,8 +44,22 @@ services:
       - "3081:3081"
     environment:
       - PUBLIC_API_URL=http://backend:8081
+      - PUBLIC_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - PUBLIC_LIVEKIT_URL=${LIVEKIT_URL}
     depends_on:
       - backend
+
+  livekit:
+    image: livekit/livekit-server
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    volumes:
+      - ./livekit.yaml:/livekit.yaml
+    command: --config /livekit.yaml
+    environment:
+      - LIVEKIT_KEYS=${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
 
 volumes:
   postgres_data:
