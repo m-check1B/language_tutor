@@ -9,24 +9,26 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
     restart: unless-stopped
 
   backend:
     build: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8081
+    command: uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT}
     ports:
-      - "8081:8081"
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_SERVER=db
-      - POSTGRES_PORT=${DB_PORT}
-      - POSTGRES_DB=${DB_NAME}
+      - DB_HOST=db
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
       - SECRET_KEY=${BACKEND_SECRET_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
-      - LIVEKIT_API_URL=${LIVEKIT_URL}
+      - LIVEKIT_URL=${LIVEKIT_URL}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     depends_on:
@@ -36,9 +38,9 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3081:3000"
+      - "${FRONTEND_PORT}:3000"
     environment:
-      - PUBLIC_API_URL=http://backend:8081
+      - PUBLIC_API_URL=${PUBLIC_API_URL}
       - PUBLIC_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - PUBLIC_LIVEKIT_URL=${LIVEKIT_URL}
     depends_on:
@@ -51,7 +53,9 @@ services:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
-    command: --dev --bind 0.0.0.0 --port 7880 --udp-port 7882
+    command: --config /livekit-config.yaml
+    volumes:
+      - ./livekit-config.yaml:/livekit-config.yaml
     environment:
       - LIVEKIT_KEYS=${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
     restart: unless-stopped
