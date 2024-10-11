@@ -36,7 +36,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3081:3081"
+      - "3081:3000"
     environment:
       - PUBLIC_API_URL=http://backend:8081
       - PUBLIC_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
@@ -51,9 +51,7 @@ services:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
-    volumes:
-      - ./livekit.yaml:/livekit.yaml
-    command: --config /livekit.yaml
+    command: --dev --bind 0.0.0.0 --port 7880 --udp-port 7882
     environment:
       - LIVEKIT_KEYS=${LIVEKIT_API_KEY}:${LIVEKIT_API_SECRET}
     restart: unless-stopped
