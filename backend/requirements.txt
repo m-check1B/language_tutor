@@ -1,4 +1,4 @@
-fastapi==0.68.0
+fastapi>=0.100
 uvicorn==0.15.0
 sqlalchemy==1.4.23
 psycopg2-binary==2.9.1
@@ -10,5 +10,3 @@ bcrypt==3.2.0
 openai==0.27.0
 websockets==10.1
 alembic==1.7.7
-livekit-server-sdk==0.3.0
-fastapi-swagger==0.1.1

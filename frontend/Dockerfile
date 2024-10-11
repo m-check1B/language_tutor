@@ -26,7 +26,7 @@ COPY --from=build /app/package.json .
 COPY --from=build /app/node_modules ./node_modules
 
 # Expose the port the app runs on
-EXPOSE 3000
+EXPOSE 3081
 
 # Start the application
 CMD ["node", "build"]

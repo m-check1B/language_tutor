@@ -4,10 +4,9 @@ This guide outlines the steps to deploy the Language Tutor application in a prod
 
 ## Prerequisites
 
-- A server with Docker and Docker Compose installed
-- Domain name pointing to your server's IP address
-- SSL certificate for your domain (we'll use Let's Encrypt)
-- Python 3.7+ installed on your local machine for running the production test script
+- An internal VM with Docker and Docker Compose installed
+- Nginx server configured as a reverse proxy
+- Domain name pointing to your Nginx server's IP address
 
 ## Deployment Steps
 
@@ -23,87 +22,77 @@ This guide outlines the steps to deploy the Language Tutor application in a prod
    Create a `.env` file in the project root and add the following variables:
 
    ```
-   SECRET_KEY=your_secret_key
+   PRODUCTION_DOMAIN=your-internal-vm-ip-or-hostname
+   DB_HOST=db
+   DB_PORT=5432
+   DB_NAME=language_tutor
+   DB_USER=your_db_user
+   DB_PASSWORD=your_db_password
+   BACKEND_SECRET_KEY=your_backend_secret_key
    OPENAI_API_KEY=your_openai_api_key
    LIVEKIT_API_KEY=your_livekit_api_key
    LIVEKIT_API_SECRET=your_livekit_api_secret
    ```
 
-3. **Build and Start the Services**
+3. **Update Docker Compose File**
+
+   Ensure that the `docker-compose.yml` file has the correct port mappings:
+
+   ```yaml
+   version: '3.8'
+   services:
+     frontend:
+       # ... other configurations ...
+       ports:
+         - "3000:3000"
+     
+     backend:
+       # ... other configurations ...
+       ports:
+         - "8000:8000"
+     
+     # ... other services ...
+   ```
+
+4. **Build and Start the Services**
 
    ```
    docker-compose up -d --build
    ```
 
-4. **Set Up SSL with Let's Encrypt**
+5. **Configure Nginx**
 
-   Install Certbot and obtain an SSL certificate:
-
-   ```
-   sudo apt-get update
-   sudo apt-get install certbot python3-certbot-nginx
-   sudo certbot --nginx -d yourdomain.com
-   ```
-
-   Follow the prompts to complete the SSL setup.
-
-5. **Update Nginx Configuration**
-
-   Edit the `nginx.conf` file to include the SSL configuration provided by Certbot. The file should look similar to this:
+   Update your Nginx configuration to proxy requests to the correct ports:
 
    ```nginx
-   events {
-       worker_connections 1024;
-   }
+   server {
+       listen 80;
+       server_name your_domain.com;
 
-   http {
-       upstream backend {
-           server backend:8000;
+       location / {
+           proxy_pass http://localhost:3000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
        }
 
-       upstream frontend {
-           server frontend:3000;
+       location /api {
+           proxy_pass http://localhost:8000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
        }
 
-       server {
-           listen 80;
-           server_name yourdomain.com;
-           return 301 https://$server_name$request_uri;
-       }
-
-       server {
-           listen 443 ssl;
-           server_name yourdomain.com;
-
-           ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
-           ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
-
-           location / {
-               proxy_pass http://frontend;
-               proxy_set_header Host $host;
-               proxy_set_header X-Real-IP $remote_addr;
-               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-               proxy_set_header X-Forwarded-Proto $scheme;
-           }
-
-           location /api {
-               proxy_pass http://backend;
-               proxy_set_header Host $host;
-               proxy_set_header X-Real-IP $remote_addr;
-               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-               proxy_set_header X-Forwarded-Proto $scheme;
-           }
-
-           location /ws {
-               proxy_pass http://backend;
-               proxy_http_version 1.1;
-               proxy_set_header Upgrade $http_upgrade;
-               proxy_set_header Connection "upgrade";
-               proxy_set_header Host $host;
-               proxy_set_header X-Real-IP $remote_addr;
-               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-               proxy_set_header X-Forwarded-Proto $scheme;
-           }
+       location /ws {
+           proxy_pass http://localhost:8000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection "Upgrade";
+           proxy_set_header Host $host;
        }
    }
    ```
@@ -111,37 +100,14 @@ This guide outlines the steps to deploy the Language Tutor application in a prod
 6. **Restart Nginx**
 
    ```
-   docker-compose restart nginx
+   sudo systemctl restart nginx
    ```
 
-7. **Set Up Automatic Renewal for SSL Certificate**
-
-   Create a cron job to automatically renew the SSL certificate:
+7. **Run Production Tests**
 
    ```
-   sudo crontab -e
+   python3 production_test.py
    ```
-
-   Add the following line:
-
-   ```
-   0 12 * * * /usr/bin/certbot renew --quiet
-   ```
-
-   This will attempt to renew the certificate every day at noon.
-
-8. **Run Production Tests**
-
-   After deployment, run the production test script to ensure everything is working correctly:
-
-   ```
-   pip install requests websocket-client
-   python production_test.py
-   ```
-
-   Make sure to update the `BASE_URL` and `WS_URL` in the `production_test.py` file with your actual domain before running the script.
-
-   If all tests pass, you should see the message "All production tests passed successfully!". If any test fails, review the error message and fix the issue before proceeding.
 
 ## Maintenance
 
@@ -162,14 +128,14 @@ This guide outlines the steps to deploy the Language Tutor application in a prod
   docker-compose logs -f service_name
   ```
 
-  Replace `service_name` with `backend`, `frontend`, `db`, or `nginx`.
+  Replace `service_name` with `frontend`, `backend`, or `db`.
 
 - **Backing Up the Database**
 
   To create a backup of the PostgreSQL database:
 
   ```
-  docker-compose exec db pg_dump -U postgres language_tutor > backup.sql
+  docker-compose exec db pg_dump -U your_db_user language_tutor > backup.sql
   ```
 
 - **Restoring the Database**
@@ -177,14 +143,17 @@ This guide outlines the steps to deploy the Language Tutor application in a prod
   To restore from a backup:
 
   ```
-  cat backup.sql | docker-compose exec -T db psql -U postgres language_tutor
+  cat backup.sql | docker-compose exec -T db psql -U your_db_user language_tutor
   ```
 
 ## Troubleshooting
 
-- If you encounter issues with the WebSocket connection, ensure that your server's firewall allows WebSocket traffic (usually on port 80 or 443).
+- If you encounter issues with the WebSocket connection, ensure that your Nginx configuration is correctly set up to proxy WebSocket connections.
 - If the frontend is not updating after deployment, you may need to clear the browser cache or perform a hard refresh.
 - For any persistent issues, check the logs of the relevant service using the `docker-compose logs` command mentioned above.
-- If the production tests fail, review the error messages carefully. They should provide information about which part of the application is not functioning as expected.
 
 Remember to regularly update your dependencies and apply security patches to keep your deployment secure.
+
+## Note on Internal VM Setup
+
+This application is designed to run on an internal VM behind an Nginx server. The frontend runs on port 3000, and the backend runs on port 8000. This setup should be considered when performing tests, maintenance, or troubleshooting. Ensure that your firewall settings allow traffic on these ports between the Nginx server and the internal VM.

@@ -1,16 +1,22 @@
+import os
 import requests
 import websocket
 import json
-import ssl
+from dotenv import load_dotenv
 
-BASE_URL = "https://yourdomain.com"  # Replace with your actual domain
-API_BASE_URL = f"{BASE_URL}/api"
-WS_URL = f"wss://yourdomain.com/ws"  # Replace with your actual domain
+# Load environment variables
+load_dotenv()
 
-def test_https():
-    response = requests.get(BASE_URL)
-    assert response.status_code == 200, "HTTPS connection failed"
-    print("HTTPS connection successful")
+PRODUCTION_DOMAIN = os.getenv('PRODUCTION_DOMAIN')
+FRONTEND_URL = f"http://{PRODUCTION_DOMAIN}:3000"
+BACKEND_URL = f"http://{PRODUCTION_DOMAIN}:8000"
+API_BASE_URL = f"{BACKEND_URL}/api"
+WS_URL = f"ws://{PRODUCTION_DOMAIN}:8000/ws"
+
+def test_frontend():
+    response = requests.get(FRONTEND_URL)
+    assert response.status_code == 200, "Frontend connection failed"
+    print("Frontend connection successful")
 
 def test_api_endpoints():
     # Test registration
@@ -47,7 +53,7 @@ def test_api_endpoints():
     print("Sending message successful")
 
 def test_websocket():
-    ws = websocket.create_connection(WS_URL, sslopt={"cert_reqs": ssl.CERT_NONE})
+    ws = websocket.create_connection(WS_URL)
     ws.send(json.dumps({"type": "test"}))
     result = ws.recv()
     assert result, "WebSocket connection failed"
@@ -56,7 +62,7 @@ def test_websocket():
 
 if __name__ == "__main__":
     try:
-        test_https()
+        test_frontend()
         test_api_endpoints()
         test_websocket()
         print("All production tests passed successfully!")
