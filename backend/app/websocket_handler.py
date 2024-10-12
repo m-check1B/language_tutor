@@ -53,8 +53,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Dep
             db.refresh(ai_message)
 
             # Send both messages back to the client
-            await manager.send_personal_message(f"{user_message.id}:{user_message.content}:{user_message.is_user}", user.id)
-            await manager.send_personal_message(f"{ai_message.id}:{ai_message.content}:{ai_message.is_user}", user.id)
+            await manager.send_personal_message(f"{conversation_id}:{user_message.content}:True", user.id)
+            await manager.send_personal_message(f"{conversation_id}:{ai_message.content}:False", user.id)
 
     except WebSocketDisconnect:
         manager.disconnect(user.id)

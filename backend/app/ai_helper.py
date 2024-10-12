@@ -19,7 +19,7 @@ def generate_ai_response(user_message: str, conversation_history: list) -> str:
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model=settings.OPENAI_MODEL,
             messages=messages,
             max_tokens=150,
             n=1,

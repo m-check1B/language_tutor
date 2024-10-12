@@ -2,20 +2,20 @@
   import { goto } from '$app/navigation';
   import { setToken } from '../../stores.js';
 
-  let username = '';
+  let email = '';
   let password = '';
   let error = '';
 
   async function handleSubmit() {
     error = '';
     try {
-      const response = await fetch('http://localhost:8000/auth/token', {
+      const response = await fetch('http://localhost:8081/auth/login', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
         },
-        body: new URLSearchParams({
-          username,
+        body: JSON.stringify({
+          email,
           password,
         }),
       });
@@ -43,12 +43,12 @@
 
 <form on:submit|preventDefault={handleSubmit}>
   <div>
-    <label for="username">Username:</label>
-    <input type="text" id="username" bind:value={username} required>
+    <label for="email">Email:</label>
+    <input type="email" id="email" bind:value={email} required autocomplete="email">
   </div>
   <div>
     <label for="password">Password:</label>
-    <input type="password" id="password" bind:value={password} required>
+    <input type="password" id="password" bind:value={password} required autocomplete="current-password">
   </div>
   <button type="submit">Login</button>
 </form>

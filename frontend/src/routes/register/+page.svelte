@@ -7,6 +7,33 @@
   let confirmPassword = '';
   let error = '';
 
+  async function login(email, password) {
+    try {
+      const response = await fetch('http://localhost:8081/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Here you would typically store the token in localStorage or a secure cookie
+        // For example: localStorage.setItem('token', data.access_token);
+        goto('/'); // Redirect to home page or dashboard
+      } else {
+        throw new Error('Login failed');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      error = 'An error occurred during login. Please try logging in manually.';
+    }
+  }
+
   async function handleSubmit() {
     error = '';
 
@@ -16,7 +43,7 @@
     }
 
     try {
-      const response = await fetch('http://localhost:8000/auth/register', {
+      const response = await fetch('http://localhost:8081/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -29,8 +56,11 @@
       });
 
       if (response.ok) {
-        // Registration successful, redirect to login page
-        goto('/login');
+        // Registration successful, attempt to log in
+        await login(email, password);
+      } else if (response.status === 0) {
+        // Handle empty response
+        error = 'No response from server. Please try again.';
       } else {
         const errorData = await response.json();
         error = errorData.detail || 'An error occurred during registration.';
@@ -51,19 +81,19 @@
 <form on:submit|preventDefault={handleSubmit}>
   <div>
     <label for="username">Username:</label>
-    <input type="text" id="username" bind:value={username} required>
+    <input type="text" id="username" bind:value={username} required autocomplete="username">
   </div>
   <div>
     <label for="email">Email:</label>
-    <input type="email" id="email" bind:value={email} required>
+    <input type="email" id="email" bind:value={email} required autocomplete="email">
   </div>
   <div>
     <label for="password">Password:</label>
-    <input type="password" id="password" bind:value={password} required>
+    <input type="password" id="password" bind:value={password} required autocomplete="new-password">
   </div>
   <div>
     <label for="confirmPassword">Confirm Password:</label>
-    <input type="password" id="confirmPassword" bind:value={confirmPassword} required>
+    <input type="password" id="confirmPassword" bind:value={confirmPassword} required autocomplete="new-password">
   </div>
   <button type="submit">Register</button>
 </form>

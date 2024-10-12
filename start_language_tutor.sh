@@ -24,6 +24,14 @@ export GOOGLE_CLIENT_ID=your_google_client_id
 export GOOGLE_CLIENT_SECRET=your_google_client_secret
 export LIVEKIT_URL=your_livekit_url
 
+# Stop and remove existing containers
+echo "Stopping and removing existing containers..."
+docker-compose down
+
+# Remove all unused containers, networks, images (both dangling and unreferenced), and volumes
+echo "Cleaning up Docker system..."
+docker system prune -af --volumes
+
 # Build and start Docker containers
 echo "Building and starting Docker containers..."
 docker-compose up --build -d
@@ -34,7 +42,7 @@ sleep 10
 
 # Provide instructions
 echo "
-Language Tutor application is now running!
+Language Tutor application has been cleaned, rebuilt, and restarted!
 
 Access the application:
 - Frontend: http://localhost:3081

@@ -5,7 +5,7 @@
   import { Room, RoomEvent, RemoteParticipant, LocalParticipant, RemoteTrack } from 'livekit-client';
 
   let message = '';
-  let ws: WebSocket;
+  let ws: WebSocket | null = null;
   let room: Room;
   let localParticipant: LocalParticipant;
   let remoteParticipant: RemoteParticipant;
@@ -37,7 +37,7 @@
   });
 
   async function startNewConversation() {
-    const response = await fetch('http://localhost:8000/api/conversations', {
+    const response = await fetch('http://localhost:8081/api/conversations', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${$token}`,
@@ -54,7 +54,11 @@
   }
 
   function connectWebSocket() {
-    ws = new WebSocket(`ws://localhost:8000/ws/${$token}`);
+    ws = new WebSocket(`ws://localhost:8081/ws/${$token}`);
+
+    ws.onopen = () => {
+      console.log('WebSocket connection established');
+    };
 
     ws.onmessage = (event) => {
       const [conversationId, content, isUser] = event.data.split(':');
@@ -66,17 +70,35 @@
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
+
+    ws.onclose = () => {
+      console.log('WebSocket connection closed');
+    };
   }
 
   async function sendMessage() {
-    if (message.trim() && ws.readyState === WebSocket.OPEN) {
-      ws.send(`${$currentConversation}:${message}`);
-      message = '';
+    if (!ws) {
+      console.error('WebSocket is not initialized');
+      return;
+    }
+
+    if (ws.readyState !== WebSocket.OPEN) {
+      console.error('WebSocket is not open. Current state:', ws.readyState);
+      return;
+    }
+
+    if (message.trim()) {
+      try {
+        ws.send(`${$currentConversation}:${message}`);
+        message = '';
+      } catch (error) {
+        console.error('Error sending message:', error);
+      }
     }
   }
 
   async function initializeLiveKit() {
-    const response = await fetch('http://localhost:8000/livekit/join-room', {
+    const response = await fetch('http://localhost:8081/livekit/join-room', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${$token}`,

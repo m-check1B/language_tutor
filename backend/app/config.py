@@ -33,8 +33,9 @@ class Settings:
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    # OpenAI API Key
+    # OpenAI settings
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     # LiveKit settings
     LIVEKIT_API_URL: str = os.getenv("LIVEKIT_API_URL")
