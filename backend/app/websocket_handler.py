@@ -1,60 +1,97 @@
-from fastapi import WebSocket, Depends
+from starlette.websockets import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from typing import Dict
-
-from app.models import get_db, User, Conversation, Message
-from app.auth import get_current_user
+from app import models
+import json
 from app.ai_helper import generate_ai_response
+from app.tts_helper import text_to_speech
+import base64
+from app.auth import get_current_user_from_token
+from fastapi import HTTPException
+import logging
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[int, WebSocket] = {}
+logger = logging.getLogger(__name__)
 
-    async def connect(self, websocket: WebSocket, user_id: int):
-        await websocket.accept()
-        self.active_connections[user_id] = websocket
-
-    def disconnect(self, user_id: int):
-        del self.active_connections[user_id]
-
-    async def send_personal_message(self, message: str, user_id: int):
-        if user_id in self.active_connections:
-            await self.active_connections[user_id].send_text(message)
-
-manager = ConnectionManager()
-
-async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Depends(get_db)):
-    user = await get_current_user(token, db)
-    if not user:
+async def websocket_endpoint(websocket: WebSocket, token: str, db: Session):
+    try:
+        # Authenticate the user
+        user = await get_current_user_from_token(token, db)
+        if not user:
+            await websocket.close(code=4001)
+            return
+    except HTTPException:
         await websocket.close(code=4001)
         return
 
-    await manager.connect(websocket, user.id)
+    await websocket.accept()
     try:
         while True:
-            data = await websocket.receive_text()
-            conversation_id, message_content = data.split(':', 1)
-            conversation_id = int(conversation_id)
+            data = await websocket.receive_json()
+            conversation_id = data['conversation_id']
+            message_type = data['type']
+            content = data['content']
+            is_audio_mode = data['is_audio_mode']
 
-            # Save user message
-            user_message = Message(conversation_id=conversation_id, content=message_content, is_user=True)
-            db.add(user_message)
+            # Save the message to the database
+            db_message = models.Message(content=content, conversation_id=conversation_id, is_user=True, message_type=message_type, user_id=user.id)
+            db.add(db_message)
             db.commit()
-            db.refresh(user_message)
+
+            # Send the message back to the client
+            await websocket.send_json({
+                'conversation_id': conversation_id,
+                'content': content,
+                'is_user': True,
+                'type': message_type
+            })
 
             # Generate AI response
-            conversation_history = db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at.asc()).all()
-            ai_response = generate_ai_response(message_content, conversation_history)
-
-            # Save AI message
-            ai_message = Message(conversation_id=conversation_id, content=ai_response, is_user=False)
-            db.add(ai_message)
+            ai_response = generate_ai_response(content)
+            db_ai_message = models.Message(content=ai_response, conversation_id=conversation_id, is_user=False, message_type='text', user_id=user.id)
+            db.add(db_ai_message)
             db.commit()
-            db.refresh(ai_message)
 
-            # Send both messages back to the client
-            await manager.send_personal_message(f"{conversation_id}:{user_message.content}:True", user.id)
-            await manager.send_personal_message(f"{conversation_id}:{ai_message.content}:False", user.id)
+            if is_audio_mode:
+                # Convert AI response to speech
+                audio_data = text_to_speech(ai_response)
+                audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+                await websocket.send_json({
+                    'conversation_id': conversation_id,
+                    'content': audio_base64,
+                    'is_user': False,
+                    'type': 'audio'
+                })
+            else:
+                await websocket.send_json({
+                    'conversation_id': conversation_id,
+                    'content': ai_response,
+                    'is_user': False,
+                    'type': 'text'
+                })
 
     except WebSocketDisconnect:
-        manager.disconnect(user.id)
+        logger.info(f"WebSocket disconnected for user {user.id}")
+    except Exception as e:
+        logger.error(f"Error in websocket_endpoint: {str(e)}")
+    finally:
+        # Clean up any resources if needed
+        pass
+
+async def handle_audio_upload(audio_file, conversation_id: int, user: models.User, db: Session):
+    try:
+        # Process the audio file (e.g., save it, transcribe it)
+        # For now, we'll just save a placeholder message
+        content = "Audio message received"
+        db_message = models.Message(content=content, conversation_id=conversation_id, is_user=True, message_type='audio', user_id=user.id)
+        db.add(db_message)
+        db.commit()
+
+        # Generate AI response
+        ai_response = generate_ai_response(content)
+        db_ai_message = models.Message(content=ai_response, conversation_id=conversation_id, is_user=False, message_type='text', user_id=user.id)
+        db.add(db_ai_message)
+        db.commit()
+
+        return {"message": "Audio received and processed"}
+    except Exception as e:
+        logger.error(f"Error in handle_audio_upload: {str(e)}")
+        raise

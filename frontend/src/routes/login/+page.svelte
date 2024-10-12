@@ -1,6 +1,7 @@
 <script>
   import { goto } from '$app/navigation';
   import { setToken } from '../../stores.js';
+  import { PUBLIC_API_URL } from '$env/static/public';
 
   let email = '';
   let password = '';
@@ -9,7 +10,7 @@
   async function handleSubmit() {
     error = '';
     try {
-      const response = await fetch('http://localhost:8081/auth/login', {
+      const response = await fetch(`${PUBLIC_API_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

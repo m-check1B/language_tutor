@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 
 from app.models import get_db, User, Conversation, Message
 from app.auth import get_current_user
 from app.schemas import ConversationCreate, MessageCreate, ConversationResponse, MessageResponse
-from app.ai_helper import generate_ai_response
+from app.ai_helper import generate_ai_response, speech_to_text
 
 router = APIRouter()
 
@@ -55,6 +55,22 @@ def create_message(
     db.refresh(ai_message)
     
     return [new_message, ai_message]
+
+@router.post("/conversations/{conversation_id}/transcribe", response_model=str)
+async def transcribe_audio(
+    conversation_id: int,
+    audio: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    audio_data = await audio.read()
+    transcription = speech_to_text(audio_data)
+    
+    return transcription
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 def get_conversation_messages(

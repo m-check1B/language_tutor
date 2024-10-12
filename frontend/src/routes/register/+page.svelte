@@ -1,5 +1,6 @@
 <script>
   import { goto } from '$app/navigation';
+  import { PUBLIC_API_URL } from '$env/static/public';
 
   let username = '';
   let email = '';
@@ -9,7 +10,7 @@
 
   async function login(email, password) {
     try {
-      const response = await fetch('http://localhost:8081/auth/login', {
+      const response = await fetch(`${PUBLIC_API_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -43,7 +44,7 @@
     }
 
     try {
-      const response = await fetch('http://localhost:8081/auth/register', {
+      const response = await fetch(`${PUBLIC_API_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

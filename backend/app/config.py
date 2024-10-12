@@ -1,45 +1,40 @@
-import os
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
+import os  # Import for os module
 
 class Settings:
-    PROJECT_NAME: str = "Language Tutor API"
-    PROJECT_VERSION: str = "1.0.0"
+    # Database settings
+    POSTGRES_SERVER = os.getenv("POSTGRES_SERVER")
+    POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+    POSTGRES_DB = os.getenv("POSTGRES_DB")
+    POSTGRES_USER = os.getenv("POSTGRES_USER")
+    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+    DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
-    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
-    POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "db")  # Use "db" as the default host
-    POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "language_tutor")
-    
-    # Debug print statements
-    print(f"POSTGRES_USER: {POSTGRES_USER}")
-    print(f"POSTGRES_SERVER: {POSTGRES_SERVER}")
-    print(f"POSTGRES_PORT: {POSTGRES_PORT}")
-    print(f"POSTGRES_DB: {POSTGRES_DB}")
-    
-    # Updated DATABASE_URL construction with error handling
-    try:
-        DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER}:{POSTGRES_PORT}/{POSTGRES_DB}"
-        print(f"DATABASE_URL: {DATABASE_URL}")
-    except Exception as e:
-        print(f"Error constructing DATABASE_URL: {e}")
-        DATABASE_URL = None
+    # Google Auth
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
-    # JWT settings
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key")
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    # Backend settings
+    BACKEND_SECRET_KEY = os.getenv("BACKEND_SECRET_KEY")
+    SECRET_KEY = BACKEND_SECRET_KEY  # Added SECRET_KEY
+    BACKEND_PORT = os.getenv("BACKEND_PORT")
 
     # OpenAI settings
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL")
 
-    # LiveKit settings
-    LIVEKIT_API_URL: str = os.getenv("LIVEKIT_API_URL")
-    LIVEKIT_API_KEY: str = os.getenv("LIVEKIT_API_KEY")
-    LIVEKIT_API_SECRET: str = os.getenv("LIVEKIT_API_SECRET")
+    # Deepgram settings
+    DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
-settings = Settings()
+    # Token expiration settings
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 15))  # Default to 15 minutes
+
+    # Algorithm setting
+    ALGORITHM = os.getenv("ALGORITHM", "HS256")  # Added ALGORITHM
+
+    # Auth service URL
+    AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL")  # Added AUTH_SERVICE_URL
+
+    # Production Domain
+    PRODUCTION_DOMAIN = os.getenv("PRODUCTION_DOMAIN")
+
+settings = Settings()  # Instantiate the settings

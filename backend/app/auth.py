@@ -4,6 +4,7 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+import requests
 from app.models import User, get_db
 from app.config import settings
 
@@ -13,6 +14,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+AUTH_SERVICE_URL = settings.AUTH_SERVICE_URL  # URL for the external auth service
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -21,12 +23,13 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def authenticate_user(db: Session, email: str, password: str):
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
+    try:
+        response = requests.post(f"{AUTH_SERVICE_URL}/login", json={"email": email, "password": password})
+        response.raise_for_status()
+        return response.json()  # Assuming the response contains user data
+    except Exception as e:
+        print(f"Error authenticating user: {e}")
         return False
-    if not verify_password(password, user.hashed_password):
-        return False
-    return user
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
@@ -59,7 +62,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    user = db.query(User).filter(User.email == email).first()
-    if user is None:
+    # Validate token with external auth service
+    try:
+        response = requests.get(f"{AUTH_SERVICE_URL}/validate", headers={"Authorization": f"Bearer {token}"})
+        response.raise_for_status()
+        user_data = response.json()
+        return user_data  # Assuming the response contains user data
+    except Exception:
         raise credentials_exception
-    return user
