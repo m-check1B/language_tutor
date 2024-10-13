@@ -1,83 +1,80 @@
-# Language Tutor Application
+# Language Tutor Project
 
-This is a multilanguage SvelteKit application that functions as a language tutor. It uses Google Auth for authentication, PostgreSQL as the database, and LiveKit for voice and speech recognition. The application is containerized using Docker for easy deployment.
+[Add a brief description of the Language Tutor project here]
 
-## Production Setup
+## Authentication and Paywall
 
-Follow these steps to set up and run the application in a production environment:
+This project uses a centralized authentication and paywall system that is embedded within the application. The system is integrated using iframes and postMessage communication on the frontend, and a middleware-based approach on the backend.
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/language_tutor.git
-   cd language_tutor
-   ```
+### Integration Details
 
-2. Set up environment variables:
-   - Copy the `.env.template` file to `.env`:
-     ```
-     cp .env.template .env
-     ```
-   - Open the `.env` file and fill in all the required values.
+#### Frontend
+- The auth and paywall pages are embedded using iframes in the main layout (`src/routes/+layout.svelte`).
+- Communication between the Language Tutor app and the auth system is handled via the postMessage API.
+- The auth system sends messages for successful login and logout events.
+- The Language Tutor app listens for these messages and updates its state accordingly.
 
-3. Build and start the Docker containers:
-   ```
-   docker-compose up -d --build
-   ```
+#### Backend
+- Custom middleware has been implemented to handle authentication and subscription checks.
+- All API endpoints that require authentication now use this middleware.
+- The authentication flow now uses the external auth_and_paywall system for user management and token validation.
+- Subscription status is checked for protected routes to ensure only subscribed users can access certain features.
 
-4. Your application should now be running. The services will be available on the following ports:
-   - Frontend: 3081
-   - Backend: 8081
-   - LiveKit: 7880, 7881, 7882 (UDP)
+For more detailed information on the integration approach, please refer to our [Embedded Authentication Approach](../auth_and_paywall/docs/embedded_auth_approach.md) documentation.
 
-Note: This setup assumes that SSL termination and reverse proxy are handled by the server hosting this VM. Ensure that your server's Nginx (or other proxy) is configured to forward requests to the appropriate ports.
+### Configuration
 
-## Maintenance
+To properly configure the integration:
 
-- To view logs:
-  ```
-  docker-compose logs
-  ```
+1. Ensure the correct URL for the auth_and_paywall service is set in the environment variables (AUTH_SERVICE_URL).
+2. Update the origin check in the message event listener to match your deployment setup.
+3. Set the SECRET_KEY and ALGORITHM in the backend environment variables for JWT token handling.
+4. Configure the ACCESS_TOKEN_EXPIRE_MINUTES in the backend settings to match the auth_and_paywall service settings.
 
-- To stop the application:
-  ```
-  docker-compose down
-  ```
+## Internationalization (i18n)
 
-- To update the application:
-  ```
-  git pull
-  docker-compose up -d --build
-  ```
+The Language Tutor project supports multiple languages using the svelte-i18n library. Currently, the following languages are supported:
 
-## Troubleshooting
+- English (EN)
+- Czech (CS)
+- Spanish (ES)
 
-If you encounter any issues:
-1. Check the logs of individual services:
-   ```
-   docker-compose logs [service_name]
-   ```
-   Replace [service_name] with db, backend, frontend, or livekit.
+Translation files are located in `src/lib/i18n/` directory. To add or modify translations, edit the corresponding JSON files.
 
-2. Ensure all environment variables in the `.env` file are correctly set.
+The language is automatically detected based on the URL path (e.g., `/en/`, `/cs/`, `/es/`). Users can switch between languages using the LanguageSwitcher component.
 
-3. If changes to the application are not reflecting, try rebuilding the containers:
-   ```
-   docker-compose up -d --build
-   ```
+## Getting Started
 
-For more detailed troubleshooting, refer to the TROUBLESHOOTING.md file.
+[Add instructions on how to set up and run the Language Tutor project]
 
-## Security Notes
+## API Endpoints
 
-- Keep your `.env` file secure and never commit it to version control.
-- Regularly update your dependencies and Docker images to patch any security vulnerabilities.
-- Monitor your application logs for any suspicious activities.
-- Ensure that the server hosting this VM has proper security measures in place, including firewall rules and regular security updates.
+The following API endpoints now require authentication and an active subscription:
+
+- POST /conversation/conversations
+- GET /conversation/conversations
+- POST /conversation/conversations/{conversation_id}/messages
+- POST /conversation/conversations/{conversation_id}/transcribe
+- GET /conversation/conversations/{conversation_id}/messages
+
+Please ensure you have a valid authentication token and an active subscription when accessing these endpoints.
+
+## Development
+
+When working on features that interact with the authentication or paywall system, be sure to test the integration thoroughly. Pay special attention to:
+
+- The login and logout flows
+- Handling of authentication tokens
+- Proper display and hiding of auth and subscription management iframes
+- API responses for authenticated and unauthenticated requests
+- Subscription status checks and corresponding API behaviors
+- Correct translation of all user-facing strings
+- Proper language switching and URL updating
 
 ## Contributing
 
-Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
+Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE.md file for details.
+[Add license information here]

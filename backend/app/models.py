@@ -1,8 +1,9 @@
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey, DateTime, Enum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from app.config import settings
 import datetime
+import enum
 
 print("Debugging in models.py:")
 print(f"DATABASE_URL: {settings.DATABASE_URL}")
@@ -20,6 +21,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+class SubscriptionTier(enum.Enum):
+    FREE = "free"
+    BASIC = "basic"
+    PREMIUM = "premium"
+
 class User(Base):
     __tablename__ = "users"
 
@@ -28,8 +34,23 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
+    subscription_tier = Column(Enum(SubscriptionTier), default=SubscriptionTier.FREE)
+    stripe_customer_id = Column(String, unique=True, nullable=True)
 
     conversations = relationship("Conversation", back_populates="user")
+    subscription = relationship("Subscription", back_populates="user", uselist=False)
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    stripe_subscription_id = Column(String, unique=True)
+    current_period_start = Column(DateTime)
+    current_period_end = Column(DateTime)
+    status = Column(String)
+
+    user = relationship("User", back_populates="subscription")
 
 class Conversation(Base):
     __tablename__ = "conversations"

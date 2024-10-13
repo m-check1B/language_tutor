@@ -31,8 +31,13 @@ services:
       - LIVEKIT_API_URL=${LIVEKIT_URL}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - KEYCLOAK_URL=http://keycloak:8080/auth
+      - KEYCLOAK_REALM=your_realm
+      - KEYCLOAK_CLIENT_ID=your_client_id
+      - KEYCLOAK_CLIENT_SECRET=your_client_secret
     depends_on:
       - db
+      - keycloak
     restart: unless-stopped
 
   frontend:
@@ -58,5 +63,40 @@ services:
       - ./livekit-config.yaml:/livekit-config.yaml
     restart: unless-stopped
 
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: secure_password
+      POSTGRES_DB: keycloak
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - keycloak-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    environment:
+      DB_VENDOR: postgres
+      DB_ADDR: postgres
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: secure_password
+      KEYCLOAK_USER: admin
+      KEYCLOAK_PASSWORD: secure_admin_password
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - keycloak-network
+    command:
+      - start-dev
+
 volumes:
   postgres_data:
+    driver: local
+
+networks:
+  keycloak-network:
+    driver: bridge

@@ -14,7 +14,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
-AUTH_SERVICE_URL = settings.AUTH_SERVICE_URL  # URL for the external auth service
+AUTH_SERVICE_URL = settings.AUTH_SERVICE_URL  # URL for the auth_and_paywall service
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -22,14 +22,14 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-def authenticate_user(db: Session, email: str, password: str):
+def authenticate_user(email: str, password: str):
     try:
-        response = requests.post(f"{AUTH_SERVICE_URL}/login", json={"email": email, "password": password})
+        response = requests.post(f"{AUTH_SERVICE_URL}/auth", json={"email": email, "password": password})
         response.raise_for_status()
-        return response.json()  # Assuming the response contains user data
-    except Exception as e:
+        return response.json()
+    except requests.RequestException as e:
         print(f"Error authenticating user: {e}")
-        return False
+        return None
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
@@ -41,32 +41,41 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def create_user(db: Session, username: str, email: str, password: str):
-    hashed_password = get_password_hash(password)
-    db_user = User(username=username, email=email, hashed_password=hashed_password)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    # Validate token with external auth service
-    try:
         response = requests.get(f"{AUTH_SERVICE_URL}/validate", headers={"Authorization": f"Bearer {token}"})
         response.raise_for_status()
         user_data = response.json()
-        return user_data  # Assuming the response contains user data
-    except Exception:
+        return user_data
+    except requests.RequestException:
         raise credentials_exception
+
+async def get_current_active_user(current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_active"):
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+async def check_subscription_status(current_user: dict = Depends(get_current_user)):
+    try:
+        response = requests.get(f"{AUTH_SERVICE_URL}/subscription", headers={"Authorization": f"Bearer {current_user['token']}"})
+        response.raise_for_status()
+        subscription_data = response.json()
+        if not subscription_data.get("is_subscribed"):
+            raise HTTPException(status_code=403, detail="Active subscription required")
+        return subscription_data
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Error checking subscription status: {str(e)}")
+
+def create_user(db: Session, username: str, email: str, password: str):
+    try:
+        response = requests.post(f"{AUTH_SERVICE_URL}/register", json={"username": username, "email": email, "password": password})
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        print(f"Error creating user: {e}")
+        return None
