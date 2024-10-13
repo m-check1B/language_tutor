@@ -14,10 +14,10 @@
   $: lang = $page.params.lang || 'en';
   $: $locale = lang;
 
-  // Use the PUBLIC_API_URL as a base, but with a different port for auth_and_paywall
-  const baseUrl = import.meta.env.PUBLIC_API_URL.replace(':8081', ':3000');
-  const authUrl = `${baseUrl}/${lang}/auth`;
-  const subscriptionUrl = `${baseUrl}/${lang}/subscription`;
+  // Use the nginx reverse proxy URL
+  const baseUrl = 'http://localhost';
+  const authUrl = `${baseUrl}/auth/${lang}`;
+  const subscriptionUrl = `${baseUrl}/auth/${lang}/subscription`;
 
   onMount(() => {
     // Check if the user is already logged in

@@ -18,11 +18,8 @@ export DB_PASSWORD=your_secure_password
 export DB_NAME=language_tutor_db
 export BACKEND_SECRET_KEY=your_backend_secret_key
 export OPENAI_API_KEY=your_openai_api_key
-export LIVEKIT_API_KEY=your_livekit_api_key
-export LIVEKIT_API_SECRET=your_livekit_api_secret
 export GOOGLE_CLIENT_ID=your_google_client_id
 export GOOGLE_CLIENT_SECRET=your_google_client_secret
-export LIVEKIT_URL=your_livekit_url
 
 # Stop and remove existing containers
 echo "Stopping and removing existing containers..."

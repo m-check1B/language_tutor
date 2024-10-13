@@ -2,13 +2,18 @@
   import { onMount } from 'svelte';
   import { _ } from 'svelte-i18n';
   import { user } from '../../stores';
+  import { page } from '$app/stores';
 
   let messages = [];
   let newMessage = '';
   let conversationId = null;
+  let audioElement: HTMLAudioElement;
+
+  $: lang = $page.params.lang || 'en';
 
   onMount(async () => {
     await createConversation();
+    audioElement = new Audio();
   });
 
   async function createConversation() {
@@ -35,7 +40,7 @@
     if (!newMessage.trim() || !conversationId) return;
 
     try {
-      const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+      const response = await fetch(`/api/conversations/${conversationId}/messages?lang=${lang}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -48,6 +53,13 @@
         const data = await response.json();
         messages = [...messages, ...data];
         newMessage = '';
+        
+        // Play audio if available
+        if (data[1].audio_content) {
+          const audioBlob = new Blob([data[1].audio_content], { type: 'audio/mp3' });
+          audioElement.src = URL.createObjectURL(audioBlob);
+          audioElement.play();
+        }
       } else {
         console.error('Failed to send message');
       }
@@ -62,6 +74,11 @@
     {#each messages as message}
       <div class={message.is_user ? 'user-message' : 'ai-message'}>
         <p>{message.content}</p>
+        {#if !message.is_user && message.audio_content}
+          <button on:click={() => audioElement.play()}>
+            {$_('playAudio')}
+          </button>
+        {/if}
       </div>
     {/each}
   </div>

@@ -5,9 +5,8 @@ import os
 
 load_dotenv()
 
-from .routers.auth_router import router as auth_router
-from .routers.conversation_router import router as conversation_router
-from .middleware import auth_middleware, subscription_middleware
+from .routers import conversation_router
+from .middleware import auth_middleware
 
 app = FastAPI()
 
@@ -21,8 +20,7 @@ app.add_middleware(
 )
 
 # Include the routers
-app.include_router(auth_router, prefix="/auth", tags=["auth"])
-app.include_router(conversation_router, prefix="/conversation", tags=["conversation"])
+app.include_router(conversation_router.router, prefix="/conversation", tags=["conversation"])
 
 @app.get("/")
 def read_root():
@@ -30,3 +28,7 @@ def read_root():
 
 # Add global middleware
 app.middleware("http")(auth_middleware)
+
+# Print out all registered routes for debugging
+for route in app.routes:
+    print(f"Route: {route.path}, Methods: {route.methods}")

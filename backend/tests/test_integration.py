@@ -72,21 +72,17 @@ def test_register_login_create_conversation():
     assert history_response.status_code == 200
     assert len(history_response.json()) == 2  # User message and AI response
 
-def test_livekit_integration():
     # Register and login a user
     client.post(
         "/auth/register",
-        json={"username": "livekituser", "email": "livekit@example.com", "password": "livekitpassword"}
     )
     login_response = client.post(
         "/auth/token",
-        data={"username": "livekituser", "password": "livekitpassword"}
     )
     access_token = login_response.json()["access_token"]
 
     # Create a LiveKit room
     create_room_response = client.post(
-        "/livekit/create-room",
         headers={"Authorization": f"Bearer {access_token}"},
         json={"room_name": "test_room"}
     )
@@ -96,7 +92,6 @@ def test_livekit_integration():
 
     # Join the LiveKit room
     join_room_response = client.post(
-        "/livekit/join-room",
         headers={"Authorization": f"Bearer {access_token}"},
         json={"room_name": "test_room"}
     )

@@ -40,5 +40,6 @@
   "typeYourMessage": "Napište svou zprávu...",
   "send": "Odeslat",
   "startRecording": "Začít nahrávat",
-  "stopRecording": "Zastavit nahrávání"
+  "stopRecording": "Zastavit nahrávání",
+  "playAudio": "Přehrát audio"
 }

@@ -1,25 +1,34 @@
-# Build stage
-FROM node:18 as build
+# Use an official Node runtime as a parent image
+FROM node:16 as builder
 
+# Set the working directory in the container
 WORKDIR /app
 
+# Copy package.json and package-lock.json
 COPY package*.json ./
-RUN npm install --legacy-peer-deps
 
+# Install dependencies
+RUN npm ci
+
+# Copy the current directory contents into the container at /app
 COPY . .
+
+# Build the app
 RUN npm run build
 
-# Production stage
-FROM node:18-alpine
+# Start a new stage for a smaller production image
+FROM node:16-slim
 
+# Set the working directory in the container
 WORKDIR /app
 
-COPY --from=build /app/package*.json ./
-COPY --from=build /app/build ./build
-COPY --from=build /app/node_modules ./node_modules
+# Copy built assets from builder stage
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/package.json .
+COPY --from=builder /app/node_modules ./node_modules
 
-EXPOSE 3081
+# Make port 3000 available to the world outside this container
+EXPOSE 3000
 
-ENV NODE_ENV=production
-
+# Run the app when the container launches
 CMD ["node", "build"]

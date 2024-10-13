@@ -1,7 +1,17 @@
 import { render, fireEvent, screen } from '@testing-library/svelte';
-import Chat from '../src/routes/chat/+page.svelte';
+import '@testing-library/jest-dom';
+import Chat from '../src/routes/[lang]/chat/+page.svelte';
 import { goto } from '$app/navigation';
 import { currentConversation, chatMessages } from '../src/stores';
+
+// Extend Jest matchers
+declare global {
+  namespace jest {
+    interface Matchers<R> {
+      toBeInTheDocument(): R;
+    }
+  }
+}
 
 // Mock the $app/navigation module
 jest.mock('$app/navigation', () => ({
@@ -23,13 +33,42 @@ jest.mock('../src/stores', () => ({
 
 describe('Chat Component', () => {
   let fetchMock: jest.SpyInstance;
+  let mockMediaRecorder: Partial<MediaRecorder>;
+  let mockAudio: Partial<HTMLAudioElement>;
 
   beforeEach(() => {
     fetchMock = jest.spyOn(window, 'fetch').mockImplementation(jest.fn());
     // Reset mocked stores
-    (currentConversation.set as jest.Mock).mockClear();
-    (chatMessages.set as jest.Mock).mockClear();
-    (chatMessages.update as jest.Mock).mockClear();
+    jest.mocked(currentConversation.set).mockClear();
+    jest.mocked(chatMessages.set).mockClear();
+    jest.mocked(chatMessages.update).mockClear();
+
+    // Mock MediaRecorder
+    mockMediaRecorder = {
+      start: jest.fn(),
+      stop: jest.fn(),
+      ondataavailable: jest.fn(),
+      onstop: jest.fn(),
+    };
+    global.MediaRecorder = jest.fn(() => mockMediaRecorder) as unknown as typeof MediaRecorder;
+    jest.mocked(global.MediaRecorder).isTypeSupported = jest.fn().mockReturnValue(true);
+
+    // Mock navigator.mediaDevices
+    Object.defineProperty(global.navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: jest.fn().mockResolvedValue('mock-stream'),
+      },
+      writable: true,
+    });
+
+    // Mock URL.createObjectURL
+    global.URL.createObjectURL = jest.fn().mockReturnValue('mock-audio-url');
+
+    // Mock Audio
+    mockAudio = {
+      play: jest.fn().mockResolvedValue(undefined),
+    };
+    global.Audio = jest.fn(() => mockAudio) as unknown as typeof Audio;
   });
 
   afterEach(() => {
@@ -93,5 +132,35 @@ describe('Chat Component', () => {
     );
 
     expect(chatMessages.update).toHaveBeenCalled();
+  });
+
+  // New tests for the "torture" button functionality
+  it('renders the torture button', () => {
+    render(Chat);
+    expect(screen.getByRole('button', { name: '🔁 Hold to Torture' })).toBeInTheDocument();
+  });
+
+  it('starts recording when torture button is pressed', async () => {
+    render(Chat);
+    const tortureButton = screen.getByRole('button', { name: '🔁 Hold to Torture' });
+    await fireEvent.mouseDown(tortureButton);
+
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(global.MediaRecorder).toHaveBeenCalledWith('mock-stream');
+    expect(mockMediaRecorder.start).toHaveBeenCalled();
+    expect(tortureButton.textContent).toBe('🔴 Torturing...');
+  });
+
+  it('stops recording and plays audio when torture button is released', async () => {
+    render(Chat);
+    const tortureButton = screen.getByRole('button', { name: '🔁 Hold to Torture' });
+    await fireEvent.mouseDown(tortureButton);
+    await fireEvent.mouseUp(tortureButton);
+
+    expect(mockMediaRecorder.stop).toHaveBeenCalled();
+    expect(tortureButton.textContent).toBe('🔁 Hold to Torture');
+    expect(global.URL.createObjectURL).toHaveBeenCalled();
+    expect(global.Audio).toHaveBeenCalledWith('mock-audio-url');
+    expect(mockAudio.play).toHaveBeenCalled();
   });
 });

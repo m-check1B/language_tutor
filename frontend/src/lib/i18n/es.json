@@ -40,5 +40,6 @@
   "typeYourMessage": "Escribe tu mensaje...",
   "send": "Enviar",
   "startRecording": "Comenzar grabación",
-  "stopRecording": "Detener grabación"
+  "stopRecording": "Detener grabación",
+  "playAudio": "Reproducir audio"
 }

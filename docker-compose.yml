@@ -1,102 +1,61 @@
-version: '3.8'
-
+version: '3'
 services:
-  db:
-    image: postgres:13
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-    ports:
-      - "${POSTGRES_PORT}:5432"
-    restart: unless-stopped
-
   backend:
     build: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT}
     ports:
-      - "${BACKEND_PORT}:${BACKEND_PORT}"
+      - "8000:8000"
     environment:
-      - POSTGRES_SERVER=db
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - SECRET_KEY=${BACKEND_SECRET_KEY}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/language_tutor
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
-      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
-      - LIVEKIT_API_URL=${LIVEKIT_URL}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - KEYCLOAK_URL=http://keycloak:8080/auth
-      - KEYCLOAK_REALM=your_realm
-      - KEYCLOAK_CLIENT_ID=your_client_id
-      - KEYCLOAK_CLIENT_SECRET=your_client_secret
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - AUTH_SERVICE_URL=http://auth_and_paywall:8080
+    volumes:
+      - ./backend:/app
     depends_on:
       - db
-      - keycloak
-    restart: unless-stopped
+    networks:
+      - app-network
 
   frontend:
     build: ./frontend
     ports:
-      - "${FRONTEND_PORT}:3000"
+      - "3000:3000"
     environment:
-      - PUBLIC_API_URL=${PUBLIC_API_URL}
-      - PUBLIC_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - PUBLIC_LIVEKIT_URL=${LIVEKIT_URL}
+      - VITE_API_URL=http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
-    restart: unless-stopped
+    networks:
+      - app-network
 
-  livekit:
-    image: livekit/livekit-server
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "7882:7882/udp"
-    command: --config /livekit-config.yaml
-    volumes:
-      - ./livekit-config.yaml:/livekit-config.yaml
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:14
+  db:
+    image: postgres:13
     environment:
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: secure_password
-      POSTGRES_DB: keycloak
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=language_tutor
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - keycloak-network
+      - app-network
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:latest
-    environment:
-      DB_VENDOR: postgres
-      DB_ADDR: postgres
-      DB_DATABASE: keycloak
-      DB_USER: keycloak
-      DB_PASSWORD: secure_password
-      KEYCLOAK_USER: admin
-      KEYCLOAK_PASSWORD: secure_admin_password
+  auth_and_paywall:
+    build: ../auth_and_paywall
     ports:
       - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/auth_and_paywall
     depends_on:
-      - postgres
+      - db
     networks:
-      - keycloak-network
-    command:
-      - start-dev
+      - app-network
 
 volumes:
   postgres_data:
-    driver: local
 
 networks:
-  keycloak-network:
+  app-network:
     driver: bridge

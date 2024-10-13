@@ -1,26 +1,35 @@
 # Use an official Python runtime as a parent image
-FROM python:3.10
+FROM python:3.9-slim as builder
 
 # Set the working directory in the container
 WORKDIR /app
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev
+
 # Copy the current directory contents into the container at /app
-COPY . /app
+COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.txt
 
-# Make port 8081 available to the world outside this container
-EXPOSE 8081
+# Start a new stage
+FROM python:3.9-slim
 
-# Define environment variable
-ENV MODULE_NAME=app.main
-ENV VARIABLE_NAME=app
-ENV PORT=8081
+# Set the working directory in the container
+WORKDIR /app
 
-# Copy the entrypoint script into the container
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Copy installed packages from builder
+COPY --from=builder /root/.local /root/.local
 
-# Run app.py when the container launches
-CMD ["/entrypoint.sh"]
+# Copy the current directory contents into the container at /app
+COPY . .
+
+# Make sure scripts in .local are usable:
+ENV PATH=/root/.local/bin:$PATH
+
+# Make port 8000 available to the world outside this container
+EXPOSE 8000
+
+# Run app when the container launches
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

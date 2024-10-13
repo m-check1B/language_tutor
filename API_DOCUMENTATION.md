@@ -18,7 +18,6 @@ Authorization: Bearer <your_jwt_token>
 
 Initiates a new conversation session.
 
-- **URL**: `/livekit/start-conversation`
 - **Method**: `POST`
 - **Auth required**: Yes
 
@@ -46,7 +45,6 @@ Initiates a new conversation session.
 
 Ends an active conversation session.
 
-- **URL**: `/livekit/end-conversation/{conversation_id}`
 - **Method**: `POST`
 - **Auth required**: Yes
 - **URL Params**: `conversation_id=[string]`
@@ -75,7 +73,6 @@ Ends an active conversation session.
 
 ### Connection
 
-- **URL**: `ws://localhost:8081/livekit/ws/chat/{conversation_id}`
 - **Auth required**: Yes (JWT token should be included in the connection URL)
 
 ### Message Format

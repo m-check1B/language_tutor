@@ -2,17 +2,21 @@
   import { onMount } from 'svelte';
   import { _ } from 'svelte-i18n';
   import { user } from '../../stores';
+  import { page } from '$app/stores';
 
   let messages = [];
   let isRecording = false;
   let mediaRecorder;
   let audioChunks = [];
   let conversationId = null;
-  let isProcessing = false;
+  let audioElement: HTMLAudioElement;
+
+  $: lang = $page.params.lang || 'en';
 
   onMount(async () => {
     await createConversation();
     setupMediaRecorder();
+    audioElement = new Audio();
   });
 
   async function createConversation() {
@@ -50,7 +54,7 @@
   }
 
   function startRecording() {
-    if (!isRecording && !isProcessing) {
+    if (!isRecording) {
       audioChunks = [];
       mediaRecorder.start();
       isRecording = true;
@@ -61,7 +65,6 @@
     if (isRecording) {
       mediaRecorder.stop();
       isRecording = false;
-      isProcessing = true;
     }
   }
 
@@ -70,10 +73,10 @@
 
     const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
     const formData = new FormData();
-    formData.append('audio', audioBlob, 'voice_message.wav');
+    formData.append('audio_content', audioBlob, 'voice_message.wav');
 
     try {
-      const response = await fetch(`/api/conversations/${conversationId}/voice_messages`, {
+      const response = await fetch(`/api/conversations/${conversationId}/voice_messages?lang=${lang}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${$user.token}`
@@ -86,15 +89,16 @@
         messages = [...messages, ...data];
         
         // Play the AI response
-        const audio = new Audio(`data:audio/mp3;base64,${data[1].audio_content}`);
-        await audio.play();
+        if (data[1].audio_content) {
+          const audioBlob = new Blob([data[1].audio_content], { type: 'audio/mp3' });
+          audioElement.src = URL.createObjectURL(audioBlob);
+          audioElement.play();
+        }
       } else {
         console.error('Failed to send voice message');
       }
     } catch (error) {
       console.error('Error sending voice message:', error);
-    } finally {
-      isProcessing = false;
     }
   }
 </script>
@@ -104,17 +108,22 @@
     {#each messages as message}
       <div class={message.is_user ? 'user-message' : 'ai-message'}>
         <p>{message.content}</p>
+        {#if !message.is_user && message.audio_content}
+          <button on:click={() => audioElement.play()}>
+            {$_('playAudio')}
+          </button>
+        {/if}
       </div>
     {/each}
   </div>
   <div class="input-area">
     {#if isRecording}
-      <button on:click={stopRecording} disabled={isProcessing}>
+      <button on:click={stopRecording} class="recording">
         {$_('stopRecording')}
       </button>
     {:else}
-      <button on:click={startRecording} disabled={isProcessing}>
-        {isProcessing ? $_('processing') : $_('startRecording')}
+      <button on:click={startRecording}>
+        {$_('startRecording')}
       </button>
     {/if}
   </div>
@@ -164,12 +173,15 @@
     cursor: pointer;
   }
 
-  button:hover:not(:disabled) {
+  button:hover {
     background-color: #0056b3;
   }
 
-  button:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
+  button.recording {
+    background-color: #dc3545;
+  }
+
+  button.recording:hover {
+    background-color: #c82333;
   }
 </style>

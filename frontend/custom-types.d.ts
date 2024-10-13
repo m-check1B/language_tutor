@@ -54,7 +54,6 @@ declare module '$app/environment' {
   export const browser: boolean;
 }
 
-declare module 'livekit-client' {
   export class Room {
     connect(url: string, token: string): Promise<void>;
     on(event: string, listener: (...args: any[]) => void): void;

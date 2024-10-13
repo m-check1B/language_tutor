@@ -30,8 +30,6 @@ This guide outlines the steps to deploy the Language Tutor application in a prod
    DB_PASSWORD=your_db_password
    BACKEND_SECRET_KEY=your_backend_secret_key
    OPENAI_API_KEY=your_openai_api_key
-   LIVEKIT_API_KEY=your_livekit_api_key
-   LIVEKIT_API_SECRET=your_livekit_api_secret
    ```
 
 3. **Update Docker Compose File**

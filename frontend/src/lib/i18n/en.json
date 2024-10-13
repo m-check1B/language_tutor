@@ -40,5 +40,6 @@
   "typeYourMessage": "Type your message...",
   "send": "Send",
   "startRecording": "Start Recording",
-  "stopRecording": "Stop Recording"
+  "stopRecording": "Stop Recording",
+  "playAudio": "Play Audio"
 }

@@ -1,24 +1,19 @@
 export default {
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
-      useESM: true,
-      tsconfig: './tsconfig.test.json'
-    }],
-    '^.+\\.js$': 'babel-jest',
-    '^.+\\.svelte$': 'svelte-jester'
+    '^.+\\.svelte$': 'svelte-jester',
+    '^.+\\.ts$': 'ts-jest'
   },
   moduleFileExtensions: ['js', 'ts', 'svelte'],
   testEnvironment: 'jsdom',
-  setupFilesAfterEnv: ['@testing-library/jest-dom/extend-expect'],
-  testPathIgnorePatterns: ['node_modules'],
-  bail: false,
-  verbose: true,
-  transformIgnorePatterns: ['node_modules'],
+  setupFilesAfterEnv: ['@testing-library/jest-dom'],
   moduleNameMapper: {
-    '^\\$lib(.*)$': '<rootDir>/src/lib$1',
-    '^\\$app(.*)$': [
-      '<rootDir>/.svelte-kit/dev/runtime/app$1',
-      '<rootDir>/.svelte-kit/build/runtime/app$1'
-    ]
-  }
+    '^\\$app/(.*)$': '<rootDir>/.svelte-kit/runtime/app/$1',
+    '^\\$lib/(.*)$': '<rootDir>/src/lib/$1'
+  },
+  extensionsToTreatAsEsm: ['.ts', '.svelte'],
+  globals: {
+    'ts-jest': {
+      useESM: true,
+    },
+  },
 };
