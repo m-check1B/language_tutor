@@ -23,13 +23,17 @@ async def check_subscription(user_id: str):
         else:
             raise HTTPException(status_code=401, detail="Unable to check subscription status")
 
-async def auth_middleware(request: Request, credentials: HTTPAuthorizationCredentials = security):
+async def auth_middleware(request: Request, credentials: HTTPAuthorizationCredentials = None):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authorization header is missing")
     token = credentials.credentials
     user = await verify_token(token)
     request.state.user = user
     return user
 
-async def subscription_middleware(request: Request, credentials: HTTPAuthorizationCredentials = security):
+async def subscription_middleware(request: Request, credentials: HTTPAuthorizationCredentials = None):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authorization header is missing")
     token = credentials.credentials
     user = await verify_token(token)
     subscription = await check_subscription(user["id"])
@@ -39,13 +43,15 @@ async def subscription_middleware(request: Request, credentials: HTTPAuthorizati
 
 def auth_required(func):
     async def wrapper(request: Request, *args, **kwargs):
-        await auth_middleware(request)
+        credentials = await security(request)
+        await auth_middleware(request, credentials)
         return await func(request, *args, **kwargs)
     return wrapper
 
 def subscription_required(func):
     async def wrapper(request: Request, *args, **kwargs):
-        await subscription_middleware(request)
+        credentials = await security(request)
+        await subscription_middleware(request, credentials)
         if not request.state.subscription["is_active"]:
             raise HTTPException(status_code=403, detail="Active subscription required")
         return await func(request, *args, **kwargs)

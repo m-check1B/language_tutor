@@ -1,10 +1,10 @@
 import openai
-from deepgram import Deepgram
+from deepgram import Deepgram, DeepgramClient
 from app.config import settings
 from typing import List
 
 openai.api_key = settings.OPENAI_API_KEY
-deepgram = Deepgram(settings.DEEPGRAM_API_KEY)
+deepgram = DeepgramClient(settings.DEEPGRAM_API_KEY)
 
 def generate_ai_response(user_message: str, conversation_history: List[dict], language: str = "en") -> str:
     try:
@@ -26,9 +26,11 @@ def generate_ai_response(user_message: str, conversation_history: List[dict], la
 
 async def speech_to_text(audio_data: bytes, language: str = "en-US") -> str:
     try:
-        source = {'buffer': audio_data, 'mimetype': 'audio/wav'}
-        response = await deepgram.transcription.prerecorded(source, {'language': language})
-        return response['results']['channels'][0]['alternatives'][0]['transcript']
+        response = await deepgram.transcription.prerecorded.transcribe_file(
+            {"buffer": audio_data, "mimetype": "audio/wav"},
+            {"language": language}
+        )
+        return response.results.channels[0].alternatives[0].transcript
     except Exception as e:
         print(f"Error in speech-to-text conversion: {e}")
         return ""

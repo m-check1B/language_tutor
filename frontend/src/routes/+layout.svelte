@@ -1,8 +1,8 @@
-<script>
-  import { isLoggedIn, setToken, setUser } from '../stores.js';
+<script lang="ts">
   import { onMount } from 'svelte';
   import { _, locale } from 'svelte-i18n';
   import { page } from '$app/stores';
+  import { isLoggedIn } from '../stores';
   import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import '../lib/i18n'; // Import i18n configuration
@@ -14,17 +14,12 @@
   $: lang = $page.params.lang || 'en';
   $: $locale = lang;
 
-  // Use the nginx reverse proxy URL
-  const baseUrl = 'http://localhost';
-  const authUrl = `${baseUrl}/auth/${lang}`;
-  const subscriptionUrl = `${baseUrl}/auth/${lang}/subscription`;
+  // Use an environment variable for the auth_and_paywall module URL
+  const authPaywallUrl = import.meta.env.VITE_AUTH_PAYWALL_URL || 'http://localhost:5000';
+  const authUrl = `${authPaywallUrl}/auth/${lang}`;
+  const subscriptionUrl = `${authPaywallUrl}/subscription/${lang}`;
 
   onMount(() => {
-    // Check if the user is already logged in
-    if (!$isLoggedIn) {
-      showAuth = true;
-    }
-
     // Listen for messages from iframes
     window.addEventListener('message', handleMessage);
 
@@ -33,31 +28,37 @@
     };
   });
 
-  function handleMessage(event) {
-    // Ensure the message is from our auth_and_paywall service
-    if (event.origin !== baseUrl) {
+  function handleMessage(event: MessageEvent) {
+    // Ensure the message is from our auth_paywall service
+    if (event.origin !== authPaywallUrl) {
       console.error('Received message from unknown origin:', event.origin);
       return;
     }
 
     switch (event.data.type) {
       case 'AUTH_SUCCESS':
-        setToken(event.data.token);
-        setUser(event.data.user);
+        isLoggedIn.set(true);
         showAuth = false;
-        $isLoggedIn = true;
         error = '';
         break;
       case 'LOGOUT_SUCCESS':
-        setToken(null);
-        setUser(null);
+        isLoggedIn.set(false);
         showAuth = true;
-        $isLoggedIn = false;
+        showSubscriptionManager = false;
         error = '';
-        // Redirect to home page
-        window.location.href = `/${lang}`;
         break;
       case 'AUTH_ERROR':
+        error = event.data.error;
+        break;
+      case 'CHECKOUT_SESSION_CREATED':
+        // Redirect to Stripe Checkout
+        window.location.href = event.data.url;
+        break;
+      case 'CUSTOMER_PORTAL_CREATED':
+        // Redirect to Stripe Customer Portal
+        window.location.href = event.data.url;
+        break;
+      case 'SUBSCRIPTION_ERROR':
         error = event.data.error;
         break;
       default:
@@ -72,13 +73,9 @@
 
   function logout() {
     // Send logout message to auth iframe
-    const authFrame = document.getElementById('auth-frame');
+    const authFrame = document.getElementById('auth-frame') as HTMLIFrameElement;
     if (authFrame && authFrame.contentWindow) {
-      try {
-        authFrame.contentWindow.postMessage({ type: 'LOGOUT' }, baseUrl);
-      } catch (error) {
-        console.error('Error sending logout message:', error);
-      }
+      authFrame.contentWindow.postMessage({ type: 'LOGOUT' }, authPaywallUrl);
     } else {
       console.error('Auth iframe not found');
     }
@@ -89,36 +86,44 @@
   }
 </script>
 
-<nav class="bg-gray-800 dark:bg-gray-900 text-white p-4">
-  <ul class="flex justify-around items-center">
-    <li><a href="/{lang}" class="hover:text-gray-300">{$_('home')}</a></li>
+<div class="app">
+  <header>
+    <LanguageSwitcher />
+    <ThemeToggle />
     {#if $isLoggedIn}
-      <li><a href="/{lang}/chat" class="hover:text-gray-300">{$_('chat')}</a></li>
-      <li><button on:click={toggleSubscriptionManager} class="hover:text-gray-300">{$_('manageSubscription')}</button></li>
-      <li><button on:click={logout} class="hover:text-gray-300">{$_('logout')}</button></li>
+      <button on:click={logout}>{$_('logout')}</button>
+      <button on:click={toggleSubscriptionManager}>{$_('manageSubscription')}</button>
     {:else}
-      <li><button on:click={login} class="hover:text-gray-300">{$_('loginRegister')}</button></li>
+      <button on:click={login}>{$_('login')}</button>
     {/if}
-    <li><LanguageSwitcher /></li>
-    <li><ThemeToggle /></li>
-  </ul>
-</nav>
+  </header>
 
-<main class="container mx-auto p-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
-  {#if showAuth}
-    <!-- Auth iframe: Embedded authentication page from auth_and_paywall service -->
-    <iframe id="auth-frame" src={authUrl} title={$_('authentication')} class="w-full h-screen border-none"></iframe>
-  {:else if showSubscriptionManager}
-    <!-- Subscription iframe: Embedded subscription management page from auth_and_paywall service -->
-    <iframe id="subscription-frame" src={subscriptionUrl} title={$_('subscriptionManagement')} class="w-full h-screen border-none"></iframe>
-  {:else}
-    <slot></slot>
-  {/if}
+  <main>
+    {#if showAuth}
+      <iframe id="auth-frame" src={authUrl} title="Authentication" />
+    {/if}
 
-  {#if error}
-    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-      <strong class="font-bold">Error:</strong>
-      <span class="block sm:inline">{error}</span>
-    </div>
-  {/if}
-</main>
+    {#if showSubscriptionManager}
+      <iframe id="subscription-frame" src={subscriptionUrl} title="Subscription Management" />
+    {/if}
+
+    {#if error}
+      <p class="error">{error}</p>
+    {/if}
+
+    <slot />
+  </main>
+
+  <footer>
+    <!-- Add your footer content here -->
+  </footer>
+</div>
+
+<style>
+  iframe {
+    width: 100%;
+    height: 400px;
+    border: none;
+  }
+  /* Add your other styles here */
+</style>
