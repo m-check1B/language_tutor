@@ -9,7 +9,7 @@ if ! groups | grep -q '\bdocker\b'; then
     echo "Then log out and log back in, or restart your computer."
     echo "After that, run this script again."
     exit 1
-fi
+
 
 # Set up environment variables
 echo "Setting up environment variables..."
