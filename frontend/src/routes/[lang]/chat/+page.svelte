@@ -1,7 +1,7 @@
 <script lang="ts">
     import { _ } from 'svelte-i18n';
     import { page } from '$app/stores';
-    import { auth } from '$lib/stores';
+    import { isLoggedIn } from '$lib/stores';
     import { chatStore } from '$lib/stores/chat';
     import ChatMessage from '$lib/components/ChatMessage.svelte';
     import MediaInterface from '$lib/components/MediaInterface.svelte';
