@@ -9,7 +9,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
-      - AUTH_SERVICE_URL=http://auth_and_paywall:8080
+      - AUTH_SERVICE_URL=http://localhost:8001
     volumes:
       - ./backend:/app
     depends_on:
@@ -22,7 +22,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://backend:8000
+      - VITE_API_URL=http://localhost:8000
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -39,17 +39,8 @@ services:
       - POSTGRES_DB=language_tutor
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - app-network
-
-  auth_and_paywall:
-    build: ../auth_and_paywall
     ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/auth_and_paywall
-    depends_on:
-      - db
+      - "5432:5432"
     networks:
       - app-network
 

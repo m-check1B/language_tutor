@@ -1,23 +1,29 @@
-import os
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
-load_dotenv()
+class Settings(BaseSettings):
+    # Database settings
+    POSTGRES_USER: str = "postgres"
+    POSTGRES_PASSWORD: str = "postgres"
+    POSTGRES_HOST: str = "db"
+    POSTGRES_PORT: str = "5432"
+    POSTGRES_DB: str = "language_tutor"
 
-class Settings:
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/language_tutor")
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key")
+    # JWT settings
+    SECRET_KEY: str = "your-secret-key"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    BACKEND_CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:8080"]
 
     # OpenAI settings
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4"
 
     # Deepgram settings
-    DEEPGRAM_API_KEY: str = os.getenv("DEEPGRAM_API_KEY")
+    DEEPGRAM_API_KEY: str = ""
 
     # Auth service settings
-    AUTH_SERVICE_URL: str = os.getenv("AUTH_SERVICE_URL", "http://auth_and_paywall:8080")
+    AUTH_SERVICE_URL: str = "http://auth-service:8000"
+
+    class Config:
+        env_file = ".env"
 
 settings = Settings()

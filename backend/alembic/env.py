@@ -57,7 +57,7 @@ def run_migrations_online():
 
     """
     configuration = config.get_section(config.config_ini_section)
-    configuration['sqlalchemy.url'] = settings.DATABASE_URL
+    configuration['sqlalchemy.url'] = f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",

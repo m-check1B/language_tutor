@@ -9,8 +9,6 @@
     "skipLibCheck": true,
     "sourceMap": true,
     "strict": true,
-    "verbatimModuleSyntax": true,
-    "importsNotUsedAsValues": null,
-    "preserveValueImports": null
+    "moduleResolution": "bundler"
   }
 }

@@ -1,144 +1,52 @@
-from starlette.websockets import WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
-from app import models
-import json
-from app.ai_helper import generate_ai_response, process_voice_message, speech_to_text
-from app.tts_helper import text_to_speech
-import base64
-from app.auth import get_current_user_from_token
-from fastapi import HTTPException
-import logging
+from fastapi import WebSocket
+from typing import Dict
 
-logger = logging.getLogger(__name__)
+class WebSocketManager:
+    def __init__(self):
+        self.active_connections: Dict[int, WebSocket] = {}
 
-async def websocket_endpoint(websocket: WebSocket, token: str, db: Session):
-    try:
-        # Authenticate the user
-        user = await get_current_user_from_token(token, db)
-        if not user:
-            await websocket.close(code=4001)
-            return
-    except HTTPException:
-        await websocket.close(code=4001)
-        return
+    async def connect(self, websocket: WebSocket, client_id: int):
+        """Connect a new client"""
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
 
-    await websocket.accept()
-    try:
-        while True:
-            data = await websocket.receive_json()
-            conversation_id = data['conversation_id']
-            message_type = data['type']
-            content = data['content']
-            is_audio_mode = data['is_audio_mode']
-            language = data.get('language', 'en')
+    def disconnect(self, client_id: int):
+        """Disconnect a client"""
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
 
-            if message_type == 'audio':
-                # Decode base64 audio data
-                audio_data = base64.b64decode(content)
-                # Process voice message
-                transcription, ai_response, ai_audio = await process_voice_message(audio_data, [], language)
-                
-                # Save user's message (transcription) to the database
-                db_message = models.Message(content=transcription, conversation_id=conversation_id, is_user=True, message_type='text', user_id=user.id)
-                db.add(db_message)
-                db.commit()
+    async def send_personal_message(self, message: str, client_id: int):
+        """Send a message to a specific client"""
+        if client_id in self.active_connections:
+            await self.active_connections[client_id].send_text(message)
 
-                # Send transcription back to the client
-                await websocket.send_json({
-                    'conversation_id': conversation_id,
-                    'content': transcription,
-                    'is_user': True,
-                    'type': 'text'
-                })
+    async def broadcast(self, message: str, exclude: int = None):
+        """Broadcast a message to all connected clients except the excluded one"""
+        for client_id, connection in self.active_connections.items():
+            if client_id != exclude:
+                await connection.send_text(message)
 
-                # Save AI response to the database
-                db_ai_message = models.Message(content=ai_response, conversation_id=conversation_id, is_user=False, message_type='text', user_id=user.id)
-                db.add(db_ai_message)
-                db.commit()
-
-                # Send AI response (text or audio) back to the client
-                if is_audio_mode:
-                    audio_base64 = base64.b64encode(ai_audio).decode('utf-8')
-                    await websocket.send_json({
-                        'conversation_id': conversation_id,
-                        'content': audio_base64,
-                        'is_user': False,
-                        'type': 'audio'
-                    })
-                else:
-                    await websocket.send_json({
-                        'conversation_id': conversation_id,
-                        'content': ai_response,
-                        'is_user': False,
-                        'type': 'text'
-                    })
-            else:
-                # Handle text messages (unchanged)
-                db_message = models.Message(content=content, conversation_id=conversation_id, is_user=True, message_type=message_type, user_id=user.id)
-                db.add(db_message)
-                db.commit()
-
-                await websocket.send_json({
-                    'conversation_id': conversation_id,
-                    'content': content,
-                    'is_user': True,
-                    'type': message_type
-                })
-
-                ai_response = generate_ai_response(content, [], language)
-                db_ai_message = models.Message(content=ai_response, conversation_id=conversation_id, is_user=False, message_type='text', user_id=user.id)
-                db.add(db_ai_message)
-                db.commit()
-
-                if is_audio_mode:
-                    audio_data = text_to_speech(ai_response, language)
-                    audio_base64 = base64.b64encode(audio_data).decode('utf-8')
-                    await websocket.send_json({
-                        'conversation_id': conversation_id,
-                        'content': audio_base64,
-                        'is_user': False,
-                        'type': 'audio'
-                    })
-                else:
-                    await websocket.send_json({
-                        'conversation_id': conversation_id,
-                        'content': ai_response,
-                        'is_user': False,
-                        'type': 'text'
-                    })
-
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for user {user.id}")
-    except Exception as e:
-        logger.error(f"Error in websocket_endpoint: {str(e)}")
-    finally:
-        # Clean up any resources if needed
+    async def send_to_room(self, message: str, room_id: int, exclude: int = None):
+        """Send a message to all clients in a specific room"""
+        # TODO: Implement room-based message routing
+        # This would require maintaining a mapping of room_id to client_ids
         pass
 
-async def handle_audio_upload(audio_file, conversation_id: int, user: models.User, db: Session):
-    try:
-        # Read audio file content
-        audio_data = await audio_file.read()
-        
-        # Transcribe audio to text
-        transcription = await speech_to_text(audio_data)
-        
-        # Save transcription to database
-        db_message = models.Message(content=transcription, conversation_id=conversation_id, is_user=True, message_type='audio', user_id=user.id)
-        db.add(db_message)
-        db.commit()
+    def get_connection(self, client_id: int) -> WebSocket:
+        """Get the WebSocket connection for a specific client"""
+        return self.active_connections.get(client_id)
 
-        # Generate AI response
-        ai_response = generate_ai_response(transcription, [])
-        db_ai_message = models.Message(content=ai_response, conversation_id=conversation_id, is_user=False, message_type='text', user_id=user.id)
-        db.add(db_ai_message)
-        db.commit()
+    def is_connected(self, client_id: int) -> bool:
+        """Check if a client is connected"""
+        return client_id in self.active_connections
 
-        return {
-            "message": "Audio received and processed",
-            "transcription": transcription,
-            "ai_response": ai_response
-        }
-    except Exception as e:
-        logger.error(f"Error in handle_audio_upload: {str(e)}")
-        raise
+    async def close_connection(self, client_id: int):
+        """Close a specific client connection"""
+        if client_id in self.active_connections:
+            await self.active_connections[client_id].close()
+            self.disconnect(client_id)
+
+    async def close_all_connections(self):
+        """Close all active connections"""
+        for client_id in list(self.active_connections.keys()):
+            await self.close_connection(client_id)

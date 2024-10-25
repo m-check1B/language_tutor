@@ -1,23 +1,85 @@
 import { writable } from 'svelte/store';
 
 function createAuth() {
-    const { subscribe, set, update } = writable({
-        isAuthenticated: false,
+    const { subscribe, set } = writable({
+        isLoggedIn: false,
+        token: null,
         user: null
     });
 
     return {
         subscribe,
-        init: async () => {
-            // TODO: Implement actual authentication check
-            console.log('Auth initialized');
+        login: async (email, password) => {
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Login failed');
+                }
+
+                const data = await response.json();
+                set({
+                    isLoggedIn: true,
+                    token: data.access_token,
+                    user: data.user
+                });
+
+                localStorage.setItem('token', data.access_token);
+            } catch (error) {
+                throw error;
+            }
         },
-        checkAuth: () => {
-            // TODO: Implement actual authentication check
-            update(state => ({ ...state, isAuthenticated: true }));
+        register: async (email, password) => {
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Registration failed');
+                }
+
+                const data = await response.json();
+                set({
+                    isLoggedIn: true,
+                    token: data.access_token,
+                    user: data.user
+                });
+
+                localStorage.setItem('token', data.access_token);
+            } catch (error) {
+                throw error;
+            }
         },
         logout: () => {
-            set({ isAuthenticated: false, user: null });
+            localStorage.removeItem('token');
+            set({
+                isLoggedIn: false,
+                token: null,
+                user: null
+            });
+        },
+        initialize: () => {
+            const token = localStorage.getItem('token');
+            if (token) {
+                set({
+                    isLoggedIn: true,
+                    token,
+                    user: null // We could fetch user details here if needed
+                });
+            }
         }
     };
 }

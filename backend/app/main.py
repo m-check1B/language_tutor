@@ -1,47 +1,31 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-import os
-from starlette.middleware.base import BaseHTTPMiddleware
+from .routers import auth_router, chat_router
+from . import models
+from .database import engine
 
-load_dotenv()
+# Create database tables
+models.Base.metadata.create_all(bind=engine)
 
-from .routers import conversation_router
-from .middleware import auth_middleware, security
-
-app = FastAPI()
+app = FastAPI(title="Language Tutor API")
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"],  # In production, replace with specific origins
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Custom middleware class
-class AuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        try:
-            credentials = await security(request)
-            await auth_middleware(request, credentials)
-        except:
-            # If authentication fails, continue without setting user info
-            pass
-        response = await call_next(request)
-        return response
-
-# Add custom middleware
-app.add_middleware(AuthMiddleware)
-
-# Include the routers
-app.include_router(conversation_router.router, prefix="/conversation", tags=["conversation"])
+# Include routers
+app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
+app.include_router(chat_router.router, prefix="/api/chat", tags=["chat"])
 
 @app.get("/")
-def read_root():
-    return {"message": "Welcome to the Language Tutor API"}
+async def root():
+    return {"message": "Language Tutor API"}
 
-# Print out all registered routes for debugging
-for route in app.routes:
-    print(f"Route: {route.path}, Methods: {route.methods}")
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}

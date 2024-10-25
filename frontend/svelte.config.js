@@ -3,19 +3,13 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-	preprocess: vitePreprocess(),
-
-	kit: {
-		adapter: adapter({
-			out: 'build',
-			precompress: false,
-			envPrefix: '',
-			polyfill: true
-		}),
-		paths: {
-			base: process.env.SVELTE_BASE_PATH
-		}
-	}
+  kit: {
+    adapter: adapter(),
+    csrf: {
+      checkOrigin: false,
+    }
+  },
+  preprocess: vitePreprocess()
 };
 
 export default config;

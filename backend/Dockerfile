@@ -1,11 +1,11 @@
 # Use an official Python runtime as a parent image
-FROM python:3.9-slim as builder
+FROM python:3.11-slim as builder
 
 # Set the working directory in the container
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev dos2unix
 
 # Copy the current directory contents into the container at /app
 COPY requirements.txt .
@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
 # Start a new stage
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Set the working directory in the container
 WORKDIR /app
@@ -31,5 +31,13 @@ ENV PATH=/root/.local/bin:$PATH
 # Make port 8000 available to the world outside this container
 EXPOSE 8000
 
-# Run app when the container launches
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Convert line endings and make the entrypoint script executable
+RUN apt-get update && apt-get install -y dos2unix \
+    && dos2unix /app/entrypoint.sh \
+    && chmod +x /app/entrypoint.sh \
+    && apt-get remove -y dos2unix \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Run entrypoint script
+CMD ["/bin/sh", "/app/entrypoint.sh"]
