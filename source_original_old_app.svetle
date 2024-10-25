@@ -1,0 +1,858 @@
+<script>
+  import { onMount } from 'svelte';
+  import { writable, get } from 'svelte/store';
+  import axios from 'axios';
+
+  let audioChunks = [];
+  let videoChunks = [];
+  let audioRecorder;
+  let videoRecorder;
+  let videoStream = null;
+  let isSilentMode = writable(false);
+  let isAudioRecording = writable(false);
+  let isVideoRecording = writable(false);
+  let userMessage = writable('');
+  let chatHistory = writable([]);
+  let transcriptionError = writable('');
+  let responseError = writable('');
+  let isLoading = writable(false);
+  let lastAudioUrl = null;
+  let audioPlayer = null;
+  let selectedFile = null;
+  let email = '';
+  let password = '';
+  let isAuthenticated = writable(false);
+  let token = writable('');
+  let loginError = writable('');
+
+  const backendUrl = 'http://localhost:8000';
+
+  let selectedVideoFile = null;
+  let selectedImageFile = null;
+  let selectedTextFile = null;
+  let selectedPdfFile = null;
+  let selectedAudioFile = null;
+  let promptText = '';
+
+  // TTS specific states
+  let ttsVoices = writable([]);
+  let selectedVoice = writable('alloy');
+  let speechSpeed = writable(1.0);
+
+  onMount(async () => {
+    console.log('App mounted');
+    if (get(isAuthenticated)) {
+      setupAudioRecorder();
+      setupVideoRecorder();
+      await fetchTTSConfig();
+    }
+  });
+
+  async function fetchTTSConfig() {
+    try {
+      const response = await axios.get(`${backendUrl}/api/ttsconfig/`);
+      ttsVoices.set(response.data.voices);
+    } catch (error) {
+      console.error('Error fetching TTS configuration:', error);
+    }
+  }
+
+  function setupAudioRecorder() {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        console.log('Audio recorder setup successful');
+        audioRecorder = new MediaRecorder(stream);
+        audioRecorder.ondataavailable = e => {
+          if (get(isAudioRecording)) audioChunks.push(e.data);
+        };
+        audioRecorder.onstop = async () => {
+          console.log('Audio recorder stopped');
+          try {
+            if (get(isAudioRecording)) {
+              console.log('Preparing to send audio');
+              const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+              selectedAudioFile = new File([audioBlob], "audio.wav", { type: 'audio/wav' });
+              await handleTranscriptionAndSend();
+              console.log('Audio upload completed');
+            } else {
+              console.log('Recording state (audio) was false, not sending audio');
+            }
+          } catch (error) {
+            console.error('Error during onstop processing for audio:', error);
+          } finally {
+            isAudioRecording.set(false);
+            isLoading.set(false);
+          }
+        };
+      })
+      .catch(error => {
+        console.error('Error accessing microphone:', error);
+        transcriptionError.set(`Error accessing microphone: ${error.message}`);
+      });
+  }
+
+  async function toggleAudioRecording() {
+    if (get(isAudioRecording)) {
+      audioRecorder.stop();
+    } else {
+      audioChunks = [];
+      audioRecorder.start();
+      isAudioRecording.set(true);
+      console.log('Started audio recording');
+    }
+  }
+
+  function setupVideoRecorder() {
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        console.log('Video recorder setup successful');
+        videoRecorder = new MediaRecorder(stream);
+        videoRecorder.ondataavailable = e => {
+          if (get(isVideoRecording)) videoChunks.push(e.data);
+        };
+        videoRecorder.onstop = async () => {
+          console.log('Video recorder stopped');
+          try {
+            if (get(isVideoRecording)) {
+              console.log('Preparing to send video');
+              const videoBlob = new Blob(videoChunks, { type: 'video/mp4' });
+              selectedVideoFile = new File([videoBlob], "video.mp4", { type: 'video/mp4' });
+              await handleVideoUpload();
+              console.log('Video upload completed');
+            } else {
+              console.log('Recording state (video) was false, not sending video');
+            }
+          } catch (error) {
+            console.error('Error during onstop processing for video:', error);
+          } finally {
+            isVideoRecording.set(false);
+            isLoading.set(false);
+          }
+        };
+      })
+      .catch(error => {
+        console.error('Error accessing camera:', error);
+        transcriptionError.set(`Error accessing camera: ${error.message}`);
+      });
+  }
+
+  async function toggleVideoRecording() {
+    if (get(isVideoRecording)) {
+      videoRecorder.stop();
+    } else {
+      videoChunks = [];
+      videoRecorder.start();
+      isVideoRecording.set(true);
+      console.log('Started video recording');
+    }
+  }
+
+  async function handleTextMessage() {
+    isLoading.set(true);
+    const formData = new FormData();
+    formData.append('prompt_text', promptText);
+    try {
+      const response = await axios.post(`${backendUrl}/api/text/`, formData, {
+        headers: { 'Authorization': `Bearer ${get(token)}` }
+      });
+      console.log('Response received:', response.data.response_text);
+      chatHistory.update(history => [...history, { text: `You: ${promptText}`, isUser: true }]);
+      chatHistory.update(history => [...history, { text: `Assistant: ${response.data.response_text}`, isUser: false }]);
+      await synthesizeSpeech(response.data.response_text);
+    } catch (error) {
+      console.error('Failed to send text message:', error);
+      let errorMessage = 'Failed to generate response';
+      if (error.response && error.response.data && error.response.data.detail) {
+        errorMessage += ': ' + error.response.data.detail;
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      } else {
+        errorMessage += ': Unknown error occurred';
+      }
+      responseError.set(errorMessage);
+    } finally {
+      isLoading.set(false);
+      //clearPreviousData();
+    }
+  }
+
+async function handleTranscriptionAndSend() { // and speak
+    isLoading.set(true);  // Start loading indicator
+
+    const formData = new FormData();
+    formData.append('file', selectedAudioFile);  // Append the audio file to the FormData object
+
+    try {
+        console.log('Starting audio file upload... (frontend)');
+        
+        // Sending the audio file to the backend for transcription
+        const transcriptionResponse = await axios.post(`${backendUrl}/api/transcribe/`, formData, {
+            headers: { 'Authorization': `Bearer ${get(token)}` }  // Use bearer token for authorization
+        });
+
+        console.log('Audio upload completed (frontend)');
+        
+        // Extract the transcription from the response
+        const transcription = transcriptionResponse.data.transcription;
+        console.log('Transcription response received: (frontend)', transcription);
+
+        // Check if transcription is not empty
+        if (!transcription) {
+            console.error('Transcription is empty (frontend)');
+            throw new Error('Transcription is empty');
+        }
+
+        // Immediately update the chat history with the user's transcribed message
+        chatHistory.update(history => [...history, { text: `User: ${transcription}`, isUser: true }]);
+
+        // Prepare the transcribed text to be sent for further processing
+        const textFormData = new FormData();
+        textFormData.append('prompt_text', transcription);  // Use the transcribed text as the prompt text
+
+        console.log('Sending transcribed text for processing... (frontend)');
+        
+        // Send the transcribed text to another endpoint (LLM) to process the text
+        const textResponse = await axios.post(`${backendUrl}/api/text/`, textFormData, {
+            headers: { 'Authorization': `Bearer ${get(token)}` }
+        });
+
+        console.log('Text processing completed (frontend)');
+        
+        // Update the chat with the response from the LLM under "Assistant:"
+        const assistantResponse = textResponse.data.response_text;
+        chatHistory.update(history => [...history, { text: `Assistant: ${assistantResponse}`, isUser: false }]);
+        
+        // Synthesize and play the assistant's response
+        await synthesizeSpeech(assistantResponse);
+    } catch (error) {
+        console.error('Failed to handle the transcription and direct text processing: (frontend)', error);
+        let errorMessage = 'Failed to process request';
+
+        // Handle specific errors and display appropriate messages
+        if (error.response && error.response.data && error.response.data.detail) {
+            errorMessage += ': ' + error.response.data.detail;
+        } else if (error.message) {
+            errorMessage += ': ' + error.message;
+        } else {
+            errorMessage += ': Unknown error occurred';
+        }
+        transcriptionError.set(errorMessage);  // Set error message in the state
+    } finally {
+        isLoading.set(false);  // Stop the loading indicator
+    }
+}
+
+
+
+  async function handleAudioUpload() {
+    isLoading.set(true);
+    const formData = new FormData();
+    formData.append('audio', selectedAudioFile);
+    formData.append('prompt_text', "User send audio message.");
+    try {
+      const response = await axios.post(`${backendUrl}/api/audio/`, formData, {
+        headers: { 'Authorization': `Bearer ${get(token)}` }
+      });
+      console.log('Response received:', response.data.response_text);
+      chatHistory.update(history => [...history, { text: `You: ${response.data.transcription}`, isUser: true }]);
+      chatHistory.update(history => [...history, { text: `Assistant: ${response.data.response_text}`, isUser: false }]);
+      await synthesizeSpeech(response.data.response_text);
+    } catch (error) {
+      console.error('Failed to send audio message:', error);
+      let errorMessage = 'Failed to generate response';
+      if (error.response && error.response.data && error.response.data.detail) {
+        errorMessage += ': ' + error.response.data.detail;
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      } else {
+        errorMessage += ': Unknown error occurred';
+      }
+      responseError.set(errorMessage);
+    } finally {
+      isLoading.set(false);
+      //clearPreviousData();
+    }
+  }
+
+  
+
+  async function handleVideoUpload() {
+    isLoading.set(true);
+    const formData = new FormData();
+    formData.append('video', selectedVideoFile);
+    formData.append('prompt_text', "User uploaded video.");
+    try {
+      const response = await axios.post(`${backendUrl}/api/video/`, formData, {
+        headers: { 'Authorization': `Bearer ${get(token)}` }
+      });
+      console.log('Response received:', response.data.response_text);
+      chatHistory.update(history => [...history, { text: `You: ${promptText}`, isUser: true }]);
+      chatHistory.update(history => [...history, { text: `Assistant: ${response.data.response_text}`, isUser: false }]);
+      await synthesizeSpeech(response.data.response_text);
+    } catch (error) {
+      console.error('Failed to send video message:', error);
+      let errorMessage = 'Failed to generate response';
+      if (error.response && error.response.data && error.response.data.detail) {
+        errorMessage += ': ' + error.response.data.detail;
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      } else {
+        errorMessage += ': Unknown error occurred';
+      }
+      responseError.set(errorMessage);
+    } finally {
+      isLoading.set(false);
+      //clearPreviousData();
+    }
+  }
+
+  async function handleImageUpload() {
+    isLoading.set(true);
+    const formData = new FormData();
+    formData.append('image', selectedImageFile);
+    formData.append('prompt_text', "User uploaded image.");
+    try {
+      const response = await axios.post(`${backendUrl}/api/image/`, formData, {
+        headers: { 'Authorization': `Bearer ${get(token)}` }
+      });
+      console.log('Response received:', response.data.response_text);
+      chatHistory.update(history => [...history, { text: `You: ${promptText}`, isUser: true }]);
+      chatHistory.update(history => [...history, { text: `Assistant: ${response.data.response_text}`, isUser: false }]);
+      await synthesizeSpeech(response.data.response_text);
+    } catch (error) {
+      console.error('Failed to send image message:', error);
+      let errorMessage = 'Failed to generate response';
+      if (error.response && error.response.data && error.response.data.detail) {
+        errorMessage += ': ' + error.response.data.detail;
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      } else {
+        errorMessage += ': Unknown error occurred';
+      }
+      responseError.set(errorMessage);
+    } finally {
+      isLoading.set(false);
+      //clearPreviousData();
+    }
+  }
+
+  async function handlePdfUpload() {
+    isLoading.set(true);
+    const formData = new FormData();
+    formData.append('pdf', selectedPdfFile);
+    formData.append('prompt_text', "User uploaded .pdf file.");
+    try {
+      const response = await axios.post(`${backendUrl}/api/pdf/`, formData, {
+        headers: { 'Authorization': `Bearer ${get(token)}` }
+      });
+      console.log('Response received:', response.data.response_text);
+      chatHistory.update(history => [...history, { text: `You: ${promptText}`, isUser: true }]);
+      chatHistory.update(history => [...history, { text: `Assistant: ${response.data.response_text}`, isUser: false }]);
+      await synthesizeSpeech(response.data.response_text);
+    } catch (error) {
+      console.error('Failed to send PDF message:', error);
+      let errorMessage = 'Failed to generate response';
+      if (error.response && error.response.data && error.response.data.detail) {
+        errorMessage += ': ' + error.response.data.detail;
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      } else {
+        errorMessage += ': Unknown error occurred';
+      }
+      responseError.set(errorMessage);
+    } finally {
+      isLoading.set(false);
+      //clearPreviousData();
+    }
+  }
+
+  async function handleTextFileUpload() {
+    isLoading.set(true);
+    const formData = new FormData();
+    formData.append('text_file', selectedTextFile);
+    formData.append('prompt_text', "User uploaded text file.");
+    try {
+      const response = await axios.post(`${backendUrl}/api/textfile/`, formData, {
+        headers: { 'Authorization': `Bearer ${get(token)}` }
+      });
+      console.log('Response received:', response.data.response_text);
+      chatHistory.update(history => [...history, { text: `You: ${promptText}`, isUser: true }]);
+      chatHistory.update(history => [...history, { text: `Assistant: ${response.data.response_text}`, isUser: false }]);
+      await synthesizeSpeech(response.data.response_text);
+    } catch (error) {
+      console.error('Failed to send text file message:', error);
+      let errorMessage = 'Failed to generate response';
+      if (error.response && error.response.data && error.response.data.detail) {
+        errorMessage += ': ' + error.response.data.detail;
+      } else if (error.message) {
+        errorMessage += ': ' + error.message;
+      } else {
+        errorMessage += ': Unknown error occurred';
+      }
+      responseError.set(errorMessage);
+    } finally {
+      isLoading.set(false);
+      //clearPreviousData();
+    }
+  }
+
+  async function synthesizeSpeech(text) {
+    if (get(isSilentMode)) {
+      console.log('Silent mode enabled, text:', text);
+      chatHistory.update(history => [...history, { text: `Assistant (silent): ${text}`, isUser: false }]);
+      return;
+    }
+
+    const payload = {
+      model: 'tts-1-hd',  // Default model
+      input: text,
+      voice: get(selectedVoice),  // Selected voice
+      response_format: 'wav',
+      speed: get(speechSpeed)  // Selected speed
+    };
+    console.log('Synthesizing speech with payload:', payload);
+
+    try {
+      const response = await axios.post(`${backendUrl}/api/tts/`, payload, {
+        headers: { Authorization: `Bearer ${get(token)}` },
+        responseType: 'json'
+      });
+      const audioBase64 = response.data.audio_content;
+      const audioBlob = new Blob([Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0))], { type: 'audio/wav' });
+      const audioUrl = window.URL.createObjectURL(audioBlob);
+      if (audioPlayer) {
+        audioPlayer.pause();
+      }
+      audioPlayer = new Audio(audioUrl);
+      audioPlayer.playbackRate = get(speechSpeed);  // Set the playback speed
+      audioPlayer.play();
+      lastAudioUrl = audioUrl;
+      audioPlayer.onended = () => {
+        audioPlayer = null; // Clear the reference when playback ends
+      };
+    } catch (error) {
+      console.error('Error synthesizing speech:', error);
+      responseError.set('Error synthesizing speech.');
+    }
+  }
+
+
+  function stopSpeaking() {
+    if (audioPlayer) {
+      audioPlayer.pause();
+      audioPlayer.currentTime = 0;
+      console.log('Stopped speaking');
+    }
+  }
+
+  function sayItAgain() {
+    if (!lastAudioUrl) {
+      console.warn('No previous audio to replay');
+      responseError.set('No previous audio to replay.');
+      return;
+    }
+
+    const audio = new Audio(lastAudioUrl);
+    audio.onerror = (event) => {
+      console.error('Error playing audio:', event);
+      if (event.target.error.code === 4) {
+        responseError.set('Audio file not found.');
+      } else {
+        responseError.set('Error playing audio. Please try again.');
+      }
+    };
+
+    if (audioPlayer) {
+      audioPlayer.pause();
+    }
+    audioPlayer = audio;
+    audioPlayer.play();
+    audioPlayer.onended = () => {
+      audioPlayer = null; // Clear the reference when playback ends
+    };
+    console.log('Replaying audio');
+  }
+
+  async function takePicture() {
+    try {
+      if (!videoStream) {
+        videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoElement = document.querySelector('#video');
+        videoElement.srcObject = videoStream;
+        console.log('Video stream started');
+      }
+
+      const canvas = document.createElement('canvas');
+      const videoElement = document.querySelector('#video');
+      canvas.width = videoElement.videoWidth;
+      canvas.height = videoElement.videoHeight;
+      canvas.getContext('2d').drawImage(videoElement, 0, 0);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          console.error('Failed to capture image as blob.');
+          transcriptionError.set('Failed to capture image.');
+          return;
+        }
+
+        selectedImageFile = new File([blob], "captured_image.png", { type: 'image/png' });
+        console.log('Captured image and stored for processing:', selectedImageFile);
+        await handleImageUpload();
+      }, 'image/png');
+    } catch (error) {
+      console.error('Error capturing image:', error);
+      transcriptionError.set(`Error capturing image: ${error.message}`);
+    }
+  }
+
+  function selectFile(type) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    if (type === 'text') input.accept = '.txt';
+    if (type === 'pdf') input.accept = 'application/pdf';
+    if (type === 'image') input.accept = 'image/png, image/jpeg';
+    if (type === 'video') input.accept = 'video/mp4, video/x-flv, video/mov, video/mpeg, video/mpegps, video/webm, video/wmv, video/3gpp';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (type === 'text') selectedTextFile = file;
+      if (type === 'pdf') selectedPdfFile = file;
+      if (type === 'image') selectedImageFile = file;
+      if (type === 'video') selectedVideoFile = file;
+      console.log(`Selected ${type} file:`, file);
+      switch (type) {
+        case 'text':
+          await handleTextFileUpload();
+          break;
+        case 'pdf':
+          await handlePdfUpload();
+          break;
+        case 'image':
+          await handleImageUpload();
+          break;
+        case 'video':
+          await handleVideoUpload();
+          break;
+        default:
+          console.error('Invalid file type specified');
+      }
+    };
+    input.click();
+  }
+
+  async function login() {
+    const formData = new FormData();
+    formData.append('username', email);
+    formData.append('password', password);
+    console.log('Logging in with email:', email);
+
+    try {
+      const response = await axios.post(`${backendUrl}/api/token/`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      console.log('Login response:', response);
+      console.log('Access Token:', response.data.access_token); // Log the access token
+      token.set(response.data.access_token);
+      isAuthenticated.set(true);
+      loginError.set('');
+      console.log('Login successful');
+      setupAudioRecorder();
+      setupVideoRecorder();
+      await fetchTTSConfig(); // Fetch TTS configuration on login
+    } catch (error) {
+      if (error.response) {
+        console.error('Response Data:', error.response.data);
+        console.error('Response Status:', error.response.status);
+        console.error('Response Headers:', error.response.headers);
+        loginError.set(`Login failed: ${error.response.data.detail || 'Invalid email or password.'}`);
+      } else if (error.request) {
+        console.error('Request Data:', error.request);
+        loginError.set('No response from server.');
+      } else {
+        console.error('Error:', error.message);
+        loginError.set(`Error: ${error.message}`);
+      }
+    }
+  }
+
+  async function register() {
+    const formData = new FormData();
+    formData.append('email', email);
+    formData.append('password', password);
+    console.log('Registering user with email:', email);
+
+    try {
+      const response = await axios.post(`${backendUrl}/api/register/`, formData);
+      console.log('Registration successful', response.data);
+      await login();
+    } catch (error) {
+      if (error.response) {
+        console.error('Data:', error.response.data);
+        console.error('Status:', error.response.status);
+        console.error('Headers:', error.response.headers);
+        loginError.set(`Registration failed: ${error.response.data.detail || error.message}`);
+      } else if (error.request) {
+        console.error('Request:', error.request);
+        loginError.set('No response from server.');
+      } else {
+        console.error('Error:', error.message);
+        loginError.set(`Error: ${error.message}`);
+      }
+    }
+  }
+
+  function handleMessage() {
+    console.log('Storing message:', get(userMessage));
+    promptText = get(userMessage);
+    userMessage.set('');
+    // Only call handleTextMessage here, the user message will be added there
+    handleTextMessage();
+  }
+
+</script>
+
+<main>
+  {#if $isAuthenticated}
+    <img src="images/logo.png" alt="Logo" class="logo">
+    <div class="chat-window">
+      {#each $chatHistory as message}
+        <p class={message.isUser ? 'user' : 'assistant'}>{message.text}</p>
+      {/each}
+    </div>
+
+    <div class="input-area">
+      <input type="text" bind:value={$userMessage} placeholder="Type your message here..." />
+
+      <div class="buttons">
+        <button class:glow={$isLoading} on:click={handleMessage}>Send Message</button>
+        
+        <div class="record-and-replay">
+          <button class:glow={$isAudioRecording} id="recording-button" on:click={toggleAudioRecording}>
+            {$isAudioRecording ? 'Stop Recording' : 'Start Recording'}
+          </button>
+          <button id="say-again-button" on:click={sayItAgain}>Say it Again</button>
+        </div>
+        
+        <button id="stop-speaking-button" on:click={stopSpeaking}>Stop Speaking</button>
+        <button id="take-picture-button" on:click={takePicture}>Take a Picture</button>
+        <button class:glow={$isVideoRecording} id="video-recording-button" on:click={toggleVideoRecording}>
+          {$isVideoRecording ? 'Stop Video Recording' : 'Start Video Recording'}
+        </button>
+
+        <button on:click={() => selectFile('text')}>Select Text File</button>
+        <button on:click={() => selectFile('image')}>Select Image File</button>
+        <button on:click={() => selectFile('audio')}>Select Audio File</button>
+        <button on:click={() => selectFile('video')}>Select Video File</button>
+        <button on:click={() => selectFile('pdf')}>Select PDF File</button>
+
+        <label id="silent-mode-label" class:silent-mode={$isSilentMode}>
+          {$isSilentMode ? '🔇 Silent Mode' : '🔊 Sound Mode'}
+          <input id="silent-mode-toggle" type="checkbox" bind:checked={$isSilentMode} />
+        </label>
+        
+        <div class="tts-config">
+          <label for="voice-select">Voice:</label>
+          <select id="voice-select" bind:value={$selectedVoice}>
+            {#each $ttsVoices as voice}
+              <option value={voice}>{voice}</option>
+            {/each}
+          </select>
+
+          <label for="speed-input">Speed:</label>
+          <input type="range" id="speed-input" min="0.5" max="2.0" step="0.1" bind:value={$speechSpeed} />
+          <span>{$speechSpeed}</span>
+        </div>
+      </div>
+    </div>
+
+    <video id="video" autoplay style="display: none;">
+      <track kind="captions" />
+    </video>
+
+    {#if $transcriptionError}
+      <p class="error">{$transcriptionError}</p>
+    {/if}
+    {#if $responseError}
+      <p class="error">{$responseError}</p>
+    {/if}
+    {#if $isLoading}
+      <p>Loading...</p>
+    {/if}
+  {:else}
+    <div class="login-container">
+      <h2>Login</h2>
+      <input type="email" bind:value={email} placeholder="Email" required />
+      <input type="password" bind:value={password} placeholder="Password" required />
+      <button on:click={login}>Login</button>
+      <button on:click={register}>Register</button>
+      {#if $loginError}
+        <p class="error">{$loginError}</p>
+      {/if}
+    </div>
+  {/if}
+</main>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+  * {
+    font-family: 'Roboto', sans-serif;
+    font-size: 16px;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    color: #2F4F4F;
+  }
+
+  main {
+    width: 80%;
+    max-width: 800px;
+    background-color: #4A6045;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    color: #FFFFF0;
+  }
+
+  .logo {
+    max-width: 200px;
+    margin-bottom: 20px;
+  }
+
+  .chat-window {
+    max-height: 500px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    padding: 10px;
+    background: #D0E8D8;
+    border-radius: 5px;
+    border: 2px solid #556B2F;
+  }
+
+  .user,
+  .assistant {
+    padding: 10px;
+    border-radius: 10px;
+    text-align: left;
+    margin-bottom: 10px;
+    color: #FFFFF0;
+    font-size: 18px;
+  }
+
+  .user {
+    background-color: #50C878;
+  }
+
+  .assistant {
+    background-color: #006400;
+  }
+
+  .input-area input,
+  .input-area select {
+    width: 100%;
+    padding: 10px 20px;
+    margin-bottom: 10px;
+    border-radius: 15px;
+    border: 2px solid #556B2F;
+    background: #C2D2C0;
+  }
+
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  button {
+    padding: 10px 20px;
+    border-radius: 15px;
+    border: none;
+    cursor: pointer;
+    background-color: #50C878;
+    color: #FFFFF0;
+    flex: 1 1 30%;
+    text-align: center;
+  }
+
+  .glow {
+    animation: glow 1s infinite;
+  }
+
+  @keyframes glow {
+    0% {
+      box-shadow: 0 0 5px #fff;
+    }
+    50% {
+      box-shadow: 0 0 20px #fff;
+    }
+    100% {
+      box-shadow: 0 0 5px #fff;
+    }
+  }
+
+  .record-and-replay {
+    display: flex;
+    gap: 10px;
+    flex: 1 1 45%;
+    justify-content: space-between;
+  }
+
+  .error {
+    color: #F44336;
+    margin-top: 10px;
+  }
+
+  .silent-mode {
+    color: #808080;
+  }
+
+  .login-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .login-container input {
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+  }
+
+  .login-container button {
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    background-color: #50C878;
+    color: #FFFFF0;
+  }
+
+  @keyframes flash {
+    0% {
+      background-color: #50C878;
+    }
+    50% {
+      background-color: #FFF;
+    }
+    100% {
+      background-color: #50C878;
+    }
+  }
+  
+  .tts-config {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+
+  .tts-config label {
+    margin-right: 10px;
+  }
+</style>

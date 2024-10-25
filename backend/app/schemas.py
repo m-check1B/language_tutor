@@ -1,96 +1,99 @@
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
 
-# User schemas
 class UserBase(BaseModel):
     email: EmailStr
-    username: str
 
 class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
     id: int
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-
+    
     class Config:
         from_attributes = True
 
-# Message schemas
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+    user_id: Optional[int] = None
+
 class MessageBase(BaseModel):
-    content: Optional[str] = None
-    audio_url: Optional[str] = None
-    is_user_message: bool = True
+    content: str
+    role: str
+    media_type: Optional[str] = None
+    media_url: Optional[str] = None
 
 class MessageCreate(MessageBase):
     conversation_id: int
-    user_id: int
 
 class Message(MessageBase):
     id: int
-    created_at: datetime
-    conversation_id: int
     user_id: int
-
+    created_at: datetime
+    
     class Config:
         from_attributes = True
 
-# Conversation schemas
 class ConversationBase(BaseModel):
     title: str
-    is_active: bool = True
 
 class ConversationCreate(ConversationBase):
-    user_id: int
+    pass
 
 class Conversation(ConversationBase):
     id: int
+    user_id: int
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: Optional[datetime]
     messages: List[Message] = []
-
+    
     class Config:
         from_attributes = True
 
-# User Preference schemas
-class UserPreferenceBase(BaseModel):
-    language: str = "en"
-    theme: str = "light"
-    voice_enabled: bool = True
+class TTSRequest(BaseModel):
+    text: str
+    voice: str = "nova"
+    model: str = "tts-1"
+    speed: float = 1.0
 
-class UserPreferenceCreate(UserPreferenceBase):
-    user_id: int
+class TTSVoicePreferenceBase(BaseModel):
+    voice: str
+    speed: float = 1.0
+    model: str = "tts-1"
 
-class UserPreference(UserPreferenceBase):
+class TTSVoicePreferenceCreate(TTSVoicePreferenceBase):
+    pass
+
+class TTSVoicePreference(TTSVoicePreferenceBase):
     id: int
     user_id: int
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-
+    
     class Config:
         from_attributes = True
 
-# Chat specific schemas
+class FileUploadResponse(BaseModel):
+    text: str
+    media_type: str
+    media_url: Optional[str] = None
+
 class ChatMessage(BaseModel):
-    message: Optional[str] = None
-    audio: Optional[bytes] = None
+    message: str
+    conversation_id: Optional[int] = None
 
 class ChatResponse(BaseModel):
     response: str
-    audio_url: Optional[str] = None
-    error: Optional[str] = None
 
-# WebSocket schemas
 class WSMessage(BaseModel):
-    type: str  # "text" or "audio"
+    type: str
     content: str
     conversation_id: Optional[int] = None
 
 class WSResponse(BaseModel):
     type: str
     content: str
-    error: Optional[str] = None
     conversation_id: Optional[int] = None
-    timestamp: datetime = datetime.now()

@@ -47,6 +47,12 @@
             "processing": "Processing audio..."
         }
     },
+    "home": {
+        "title": "Welcome to Language Tutor",
+        "description": "Improve your language skills with our AI-powered tutor. Practice conversations, learn grammar, and enhance your vocabulary in a natural way.",
+        "getStarted": "Get Started",
+        "continueChat": "Continue Learning"
+    },
     "common": {
         "loading": "Loading...",
         "error": "An error occurred",

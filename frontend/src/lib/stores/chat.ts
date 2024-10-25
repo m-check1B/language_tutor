@@ -10,6 +10,12 @@ export interface ChatMessage {
     audioUrl?: string | null;
 }
 
+interface TTSSettings {
+    voice: string;
+    speed: number;
+    isSilentMode: boolean;
+}
+
 interface ChatState {
     messages: ChatMessage[];
     isRecording: boolean;
@@ -18,6 +24,7 @@ interface ChatState {
     stream: MediaStream | null;
     socket: WebSocket | null;
     isConnected: boolean;
+    ttsSettings: TTSSettings;
 }
 
 interface AuthState {
@@ -34,12 +41,17 @@ function createChatStore() {
         mediaRecorder: null,
         stream: null,
         socket: null,
-        isConnected: false
+        isConnected: false,
+        ttsSettings: {
+            voice: 'alloy',
+            speed: 1.0,
+            isSilentMode: false
+        }
     });
 
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 5;
-    const reconnectDelay = 1000; // Start with 1 second
+    const reconnectDelay = 1000;
 
     function setupWebSocket() {
         const authState = get(auth) as unknown as AuthState;
@@ -58,24 +70,34 @@ function createChatStore() {
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
             if (data.type === 'message') {
-                const store = get({ subscribe }) as ChatState;
-                update(state => ({
-                    ...state,
-                    messages: [...state.messages, {
-                        id: crypto.randomUUID(),
-                        message: data.content,
-                        isUser: false,
-                        timestamp: new Date().toLocaleTimeString(),
-                        audioUrl: data.audioUrl
-                    }]
-                }));
+                const currentState = get({ subscribe }) as ChatState;
+                update(state => {
+                    const newState = {
+                        ...state,
+                        messages: [...state.messages, {
+                            id: crypto.randomUUID(),
+                            message: data.content,
+                            isUser: false,
+                            timestamp: new Date().toLocaleTimeString(),
+                            audioUrl: data.audioUrl
+                        }]
+                    };
+
+                    // Handle TTS for response
+                    if (data.audioUrl && !newState.ttsSettings.isSilentMode) {
+                        const audio = new Audio(data.audioUrl);
+                        audio.playbackRate = newState.ttsSettings.speed;
+                        audio.play();
+                    }
+
+                    return newState;
+                });
             }
         };
 
         socket.onclose = () => {
             update(state => ({ ...state, socket: null, isConnected: false }));
             
-            // Attempt to reconnect with exponential backoff
             if (reconnectAttempts < maxReconnectAttempts) {
                 setTimeout(() => {
                     reconnectAttempts++;
@@ -118,7 +140,8 @@ function createChatStore() {
                 if (state.socket && state.isConnected) {
                     state.socket.send(JSON.stringify({
                         type: 'text',
-                        content: message
+                        content: message,
+                        ttsSettings: state.ttsSettings
                     }));
                 }
                 return state;
@@ -174,6 +197,9 @@ function createChatStore() {
 
             try {
                 const authState = get(auth) as unknown as AuthState;
+                const currentState = get({ subscribe }) as ChatState;
+                formData.append('ttsSettings', JSON.stringify(currentState.ttsSettings));
+
                 const response = await fetch('/api/chat/audio', {
                     method: 'POST',
                     headers: {
@@ -190,6 +216,15 @@ function createChatStore() {
                 console.error('Error sending audio:', error);
                 throw error;
             }
+        },
+        updateTTSSettings: (settings: Partial<TTSSettings>) => {
+            update(state => ({
+                ...state,
+                ttsSettings: {
+                    ...state.ttsSettings,
+                    ...settings
+                }
+            }));
         },
         clearAudioBlob: () => {
             update(state => ({ ...state, audioBlob: null }));

@@ -1,45 +1,65 @@
 {
-  "home": "Inicio",
-  "chat": "Chat",
-  "manageSubscription": "Gestionar Suscripción",
-  "logout": "Cerrar Sesión",
-  "login": "Iniciar Sesión",
-  "register": "Registrarse",
-  "loginRegister": "Iniciar Sesión/Registrarse",
-  "authentication": "Autenticación",
-  "subscriptionManagement": "Gestión de Suscripción",
-  "welcome": "Bienvenido al Tutor de Idiomas",
-  "pageTitle": "Tutor de Idiomas - Inicio",
-  "improveSkills": "¡Mejora tus habilidades lingüísticas con nuestro tutor impulsado por IA!",
-  "loggedInMessage": "Has iniciado sesión.",
-  "startChatting": "¡Empieza a chatear con nuestro tutor de IA ahora!",
-  "toStartImproving": "para empezar a mejorar tus habilidades lingüísticas.",
-  "features": "Características",
-  "feature1": "Practica conversaciones en varios idiomas",
-  "feature2": "Obtén retroalimentación instantánea sobre tu gramática y vocabulario",
-  "feature3": "Aprende a tu propio ritmo",
-  "feature4": "Sigue tu progreso a lo largo del tiempo",
-  "lightMode": "Modo Claro",
-  "darkMode": "Modo Oscuro",
-  "toggleTheme": "Cambiar tema",
-  "welcomeUser": "¡Bienvenido, {username}!",
-  "loginFailed": "Error al iniciar sesión. Por favor, verifica tus credenciales e intenta de nuevo.",
-  "logoutFailed": "Error al cerrar sesión. Por favor, intenta de nuevo.",
-  "registrationFailed": "Error en el registro. Por favor, intenta de nuevo.",
-  "loggingOut": "Cerrando sesión...",
-  "processing": "Procesando...",
-  "username": "Nombre de usuario",
-  "email": "Correo electrónico",
-  "password": "Contraseña",
-  "alreadyHaveAccount": "¿Ya tienes una cuenta? Inicia sesión",
-  "needAccount": "¿Necesitas una cuenta? Regístrate",
-  "languageTutor": "Tutor de Idiomas",
-  "welcomeToLanguageTutor": "Bienvenido al Tutor de Idiomas",
-  "switchToTextMode": "Cambiar a modo texto",
-  "switchToVoiceMode": "Cambiar a modo voz",
-  "typeYourMessage": "Escribe tu mensaje...",
-  "send": "Enviar",
-  "startRecording": "Comenzar grabación",
-  "stopRecording": "Detener grabación",
-  "playAudio": "Reproducir audio"
+    "auth": {
+        "login": {
+            "title": "Iniciar Sesión",
+            "email": "Correo electrónico:",
+            "password": "Contraseña:",
+            "submit": "Iniciar Sesión",
+            "emailPlaceholder": "Ingrese su correo electrónico",
+            "passwordPlaceholder": "Ingrese su contraseña",
+            "error": "Ocurrió un error durante el inicio de sesión",
+            "noAccount": "¿No tiene una cuenta?",
+            "registerLink": "Regístrese aquí"
+        },
+        "register": {
+            "title": "Registrarse",
+            "username": "Nombre de usuario:",
+            "email": "Correo electrónico:",
+            "password": "Contraseña:",
+            "confirmPassword": "Confirmar Contraseña:",
+            "submit": "Registrarse",
+            "usernamePlaceholder": "Ingrese su nombre de usuario",
+            "emailPlaceholder": "Ingrese su correo electrónico",
+            "passwordPlaceholder": "Ingrese su contraseña",
+            "confirmPasswordPlaceholder": "Confirme su contraseña",
+            "error": "Ocurrió un error durante el registro",
+            "passwordMismatch": "Las contraseñas no coinciden",
+            "haveAccount": "¿Ya tiene una cuenta?",
+            "loginLink": "Inicie sesión aquí"
+        }
+    },
+    "chat": {
+        "title": "Chat del Tutor de Idiomas",
+        "messagePlaceholder": "Escriba su mensaje...",
+        "startRecording": "Comenzar Grabación",
+        "stopRecording": "Detener Grabación",
+        "send": "Enviar",
+        "playAudio": "Reproducir Audio",
+        "pauseAudio": "Pausar Audio",
+        "errors": {
+            "microphoneAccess": "No se pudo acceder al micrófono",
+            "sendMessage": "Error al enviar el mensaje",
+            "sendAudio": "Error al enviar el audio"
+        },
+        "notifications": {
+            "thinking": "El tutor está pensando...",
+            "recording": "Grabando...",
+            "processing": "Procesando audio..."
+        }
+    },
+    "home": {
+        "title": "Bienvenido al Tutor de Idiomas",
+        "description": "Mejora tus habilidades lingüísticas con nuestro tutor impulsado por IA. Practica conversaciones, aprende gramática y mejora tu vocabulario de forma natural.",
+        "getStarted": "Comenzar",
+        "continueChat": "Continuar Aprendiendo"
+    },
+    "common": {
+        "loading": "Cargando...",
+        "error": "Ocurrió un error",
+        "retry": "Reintentar",
+        "cancel": "Cancelar",
+        "save": "Guardar",
+        "delete": "Eliminar",
+        "edit": "Editar"
+    }
 }

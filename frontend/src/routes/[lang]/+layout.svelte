@@ -4,7 +4,6 @@
     import { auth } from '$lib/stores/auth';
     import ThemeToggle from '$lib/components/ThemeToggle.svelte';
     import LanguageSwitcher from '$lib/components/LanguageSwitcher.svelte';
-    import '../../app.css';
 
     $: currentLang = $page.params.lang;
     $: isAuthenticated = !!$auth?.token;

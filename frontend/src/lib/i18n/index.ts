@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import { init, register, getLocaleFromNavigator } from 'svelte-i18n';
+import { init, register } from 'svelte-i18n';
 import { derived, writable } from 'svelte/store';
 
 const defaultLocale = 'en';
@@ -11,7 +11,7 @@ export const locales = {
 };
 
 // Initialize translations
-function setupI18n({ withLocale: _locale } = { withLocale: defaultLocale }) {
+export function setupI18n({ withLocale: _locale } = { withLocale: defaultLocale }) {
     // Register translations
     register('en', () => import('./en.json'));
     register('cs', () => import('./cs.json'));
@@ -33,11 +33,21 @@ export async function loadTranslations(newLocale: string) {
     if (browser) {
         locale.set(newLocale);
     }
-
+    
     setupI18n({ withLocale: newLocale });
+    
+    // Return the locale for SSR
+    return {
+        locale: newLocale
+    };
 }
 
-// If we're in the browser, setup with the default locale
+// Initialize with default locale
 if (browser) {
     setupI18n();
 }
+
+export default {
+    setupI18n,
+    loadTranslations
+};

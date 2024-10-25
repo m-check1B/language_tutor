@@ -1,0 +1,567 @@
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, UploadFile, Form, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from google.api_core.exceptions import ResourceExhausted
+from google.cloud import speech
+from google.oauth2 import service_account
+from passlib.context import CryptContext
+from pathlib import Path
+from pydantic import BaseModel
+from typing import Dict, List
+from vertexai.generative_models import GenerativeModel, Part
+from pydub import AudioSegment
+
+import base64
+import io
+import logging
+import openai
+import os
+import sqlite3
+import sys
+import uuid
+import vertexai
+import jwt
+import time
+import wave
+
+
+
+
+# Load environment variables from a .env file
+load_dotenv()
+
+# Access environment variables
+BACKENDHOST = os.getenv("BACKENDHOST")
+BACKENDPORT = int(os.getenv("BACKENDPORT"))
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT")
+MODEL_ID = os.getenv("MODEL_ID")
+PROJECT_ID = os.getenv("PROJECT_ID")
+REGION = os.getenv("REGION")
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ORIGINS = os.getenv("ORIGINS", "*")
+DATABASE_PATH = os.getenv("DATABASE_PATH")
+
+# Initialize Google services with credentials
+credentials = service_account.Credentials.from_service_account_file(GOOGLE_APPLICATION_CREDENTIALS)
+
+# MODELS INITIATION
+vertexai.init(project=PROJECT_ID, location=REGION, credentials=credentials)
+openai.api_key = OPENAI_API_KEY
+speech_recognition_client = speech.SpeechClient(credentials=credentials)
+
+# Setup logging
+log_file_path = "./logs/application.log"
+log_dir = os.path.dirname(log_file_path)
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("./logs/application.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Initialize FastAPI application
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://jackwolf.dev", "http://jackwolf.dev", "http://localhost:34401",],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# OAuth2 setup
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/token/")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Database setup
+DATABASE = DATABASE_PATH
+
+def create_connection():
+    try:
+        conn = sqlite3.connect(DATABASE, check_same_thread=False)
+        logger.info("Database connection established.")
+        return conn
+    except sqlite3.Error as e:
+        logger.error(f"Error connecting to the database: {e}")
+        return None
+
+def get_db():
+    conn = create_connection()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+def create_table():
+    conn = create_connection()
+    if conn is not None:
+        try:
+            sql_create_users_table = """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY,
+                email TEXT NOT NULL UNIQUE,
+                hashed_password TEXT NOT NULL
+            );
+            """
+            sql_create_history_table = """
+            CREATE TABLE IF NOT EXISTS history (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                query TEXT NOT NULL,
+                response TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+            """
+            conn.execute(sql_create_users_table)
+            conn.execute(sql_create_history_table)
+            conn.commit()
+            logger.info("Users and history tables created successfully.")
+        except sqlite3.Error as e:
+            logger.error(f"Error creating tables: {e}")
+        finally:
+            conn.close()
+
+create_table()
+
+def get_user_by_email(conn, email: str):
+    try:
+        sql = "SELECT * FROM users WHERE email = ?"
+        cur = conn.cursor()
+        cur.execute(sql, (email,))
+        return cur.fetchone()
+    except Exception as e:
+        logger.error(f"Error getting user by email: {e}")
+        return None
+
+def get_user_by_id(conn, user_id: int):
+    try:
+        sql = "SELECT * FROM users WHERE id = ?"
+        cur = conn.cursor()
+        cur.execute(sql, (user_id,))
+        return cur.fetchone()
+    except Exception as e:
+        logger.error(f"Error getting user by id: {e}")
+        return None
+
+def create_user(conn, email: str, hashed_password: str):
+    try:
+        sql = "INSERT INTO users (email, hashed_password) VALUES (?, ?)"
+        cur = conn.cursor()
+        cur.execute(sql, (email, hashed_password))
+        conn.commit()
+        return cur.lastrowid
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        return None
+
+def save_history(conn, user_id: int, query: str, response: str, session_id: str):
+    try:
+        sql = "INSERT INTO history (user_id, query, response, session_id) VALUES (?, ?, ?, ?)"
+        cur = conn.cursor()
+        cur.execute(sql, (user_id, query, response, session_id))
+        conn.commit()
+        return cur.lastrowid
+    except Exception as e:
+        logger.error(f"Error saving history: {e}")
+        return None
+
+def get_history(conn, user_id: int, session_id: str):
+    try:
+        sql = "SELECT * FROM history WHERE user_id = ? AND session_id = ? ORDER BY timestamp DESC"
+        cur = conn.cursor()
+        cur.execute(sql, (user_id, session_id))
+        return cur.fetchall()
+    except Exception as e:
+        logger.error(f"Error getting history: {e}")
+        return []
+
+def verify_password(plain_password, hashed_password):
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        logger.error(f"Error verifying password: {e}")
+        return False
+
+def get_password_hash(password):
+    try:
+        return pwd_context.hash(password)
+    except Exception as e:
+        logger.error(f"Error hashing password: {e}")
+        return None
+
+def authenticate_user(email: str, password: str):
+    conn = create_connection()
+    user = get_user_by_email(conn, email)
+    if user is None:
+        return False
+    if not verify_password(password, user[2]):
+        return False
+    return user
+
+
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    try:
+        to_encode = data.copy()
+        if expires_delta:
+            expire = datetime.utcnow() + expires_delta
+        else:
+            expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        to_encode.update({"exp": expire})
+        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        return encoded_jwt
+    except Exception as e:
+        logger.error(f"Error creating access token: {e}")
+        return None
+
+def retry_with_exponential_backoff(func, retries=5, initial_delay=1, max_delay=60):
+    delay = initial_delay
+    for i in range(retries):
+        try:
+            return func()
+        except ResourceExhausted as e:
+            if i == retries - 1:
+                raise e
+            time.sleep(delay)
+            delay = min(delay * 2, max_delay)
+
+@app.post("/api/token/", response_model=dict)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    logger.info("Attempting to log in user")
+    try:
+        user = authenticate_user(form_data.username, form_data.password)
+        if not user:
+            logger.warning("Incorrect username or password for user: %s", form_data.username)
+            raise HTTPException(status_code=400, detail="Incorrect username or password")
+        logger.info("Authentication successful for user: %s", form_data.username)
+
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(data={"sub": user[1], "user_id": user[0]}, expires_delta=access_token_expires)
+        if access_token is None:
+            logger.error("Token creation failed for user: %s", form_data.username)
+            raise HTTPException(status_code=500, detail="Token creation failed")
+
+        logger.info("User logged in and token generated: %s", user[1])
+        return {"access_token": access_token, "token_type": "bearer"}
+    except HTTPException as e:
+        logger.error(f"HTTP exception during login: {e.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during login for user: {form_data.username}, error: {e}")
+        raise HTTPException(status_code=500, detail="Login failed due to an unexpected error")
+
+@app.post("/api/register/")
+async def register_user(email: str = Form(...), password: str = Form(...), db: sqlite3.Connection = Depends(get_db)):
+    logger.info(f"Received registration request for email: {email}")
+    try:
+        logger.info(f"Attempting to register user with email: {email}")
+        if get_user_by_email(db, email):
+            logger.warning(f"Attempt to register already registered email: {email}")
+            raise HTTPException(status_code=400, detail="Email already registered")
+        hashed_password = get_password_hash(password)
+        if hashed_password is None:
+            raise HTTPException(status_code=500, detail="Password hashing failed")
+        logger.info(f"Hashed password for user: {email}")
+        user_id = create_user(db, email, hashed_password)
+        if user_id is None:
+            raise HTTPException(status_code=500, detail="User creation failed")
+        logger.info(f"User registered successfully with id: {user_id}, email: {email}")
+        return {"message": "User registered successfully"}
+    except HTTPException as e:
+        logger.error(f"Error during registration: {e.detail}")
+        raise
+    except sqlite3.Error as e:
+        logger.error(f"SQLite error during registration for email: {email}, error: {e}")
+        raise HTTPException(status_code=500, detail="Registration failed due to database error")
+    except Exception as e:
+        logger.error(f"Unexpected error during registration for email: {email}, error: {e}")
+        raise HTTPException(status_code=500, detail="Registration failed due to unexpected error")
+
+@app.post("/api/text/")
+async def process_text(prompt_text: str = Form(...), token: str = Depends(oauth2_scheme), db: sqlite3.Connection = Depends(get_db)):
+    try:
+        logging.info(f"Received text for processing: {prompt_text}")
+        
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        session_id = str(uuid.uuid4())
+        logging.info(f"Processing text for user {user_id} in session {session_id}")
+    except jwt.ExpiredSignatureError:
+        logging.error("Token expired")
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.PyJWTError as e:
+        logging.error(f"JWT error: {e}")
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+    try:
+        # Fetch history from the database
+        history = get_history(db, user_id, session_id)
+        context = "\n".join([f"User: {entry[2]}\nAssistant: {entry[3]}" for entry in history])
+        logging.info(f"Context constructed from history: {context}")
+
+        # Initialize the model
+        model = GenerativeModel(model_name=MODEL_ID)
+
+        # Construct the prompt with SYSTEM_PROMPT, context, and user's prompt_text
+        prompt_text_with_context = f"{SYSTEM_PROMPT}\n\n{context}\n\nUser: {prompt_text}\nAssistant:"
+        prompt = Part.from_dict({"text": prompt_text_with_context})
+        contents = [prompt]
+
+        def generate_content():
+            return model.generate_content(contents)
+
+        # Generate response using retry with exponential backoff
+        response = retry_with_exponential_backoff(generate_content)
+        response_text = response.text if hasattr(response, 'text') else "No response generated"
+
+        # Save history in the database
+        save_history(db, user_id, prompt_text, response_text, session_id)
+
+        return {"response_text": response_text, "session_id": session_id}
+    except Exception as e:
+        logging.error(f"Error during text processing: {e}")
+        raise HTTPException(status_code=500, detail="Error during text processing")
+
+
+@app.post("/api/audio/")
+async def process_audio(audio: UploadFile = File(...), prompt_text: str = Form(...), token: str = Depends(oauth2_scheme), db: sqlite3.Connection = Depends(get_db)):
+    try:
+        audio_data = await audio.read()
+        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+        audio_file = Part.from_dict({"inlineData": {"data": audio_base64, "mimeType": audio.content_type}})
+        
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        session_id = str(uuid.uuid4())
+
+        prompt = Part.from_dict({"text": f"{SYSTEM_PROMPT}\n{prompt_text}"})
+        
+        contents = [audio_file, prompt]
+
+        model = GenerativeModel(model_name=MODEL_ID)
+        response = model.generate_content(contents)
+        response_text = response.text
+
+        save_history(db, user_id, prompt_text, response_text, session_id)
+
+        return {"response_text": response_text, "session_id": session_id}
+    except Exception as e:
+        logger.error(f"Error processing audio: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process audio")
+
+@app.post("/api/video/")
+async def process_video(video: UploadFile = File(...), prompt_text: str = Form(...), token: str = Depends(oauth2_scheme), db: sqlite3.Connection = Depends(get_db)):
+    try:
+        video_data = await video.read()
+        video_base64 = base64.b64encode(video_data).decode('utf-8')
+        video_file = Part.from_dict({"inlineData": {"data": video_base64, "mimeType": video.content_type}})
+
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        session_id = str(uuid.uuid4())
+
+        prompt = Part.from_dict({"text": f"{SYSTEM_PROMPT}\n{prompt_text}"})
+
+        contents = [video_file, prompt]
+
+        model = GenerativeModel(model_name=MODEL_ID)
+        response = model.generate_content(contents)
+        response_text = response.text
+
+        save_history(db, user_id, prompt_text, response_text, session_id)
+
+        return {"response_text": response_text, "session_id": session_id}
+    except Exception as e:
+        logger.error(f"Error processing video: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process video")
+
+@app.post("/api/image/")
+async def process_image(image: UploadFile = File(...), prompt_text: str = Form(...), token: str = Depends(oauth2_scheme), db: sqlite3.Connection = Depends(get_db)):
+    try:
+        image_data = await image.read()
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        image_file = Part.from_dict({"inlineData": {"data": image_base64, "mimeType": image.content_type}})
+
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        session_id = str(uuid.uuid4())
+
+        prompt = Part.from_dict({"text": f"{SYSTEM_PROMPT}\n{prompt_text}"})
+
+        contents = [image_file, prompt]
+
+        model = GenerativeModel(model_name=MODEL_ID)
+        response = model.generate_content(contents)
+        response_text = response.text
+
+        save_history(db, user_id, prompt_text, response_text, session_id)
+
+        return {"response_text": response.text, "session_id": session_id}
+    except Exception as e:
+        logger.error(f"Error processing image: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process image")
+
+@app.post("/api/pdf/")
+async def process_pdf(pdf: UploadFile = File(...), prompt_text: str = Form(...), token: str = Depends(oauth2_scheme), db: sqlite3.Connection = Depends(get_db)):
+    try:
+        pdf_data = await pdf.read()
+        pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
+        pdf_file = Part.from_dict({"inlineData": {"data": pdf_base64, "mimeType": pdf.content_type}})
+
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        session_id = str(uuid.uuid4())
+
+        prompt = Part.from_dict({"text": f"{SYSTEM_PROMPT}\n{prompt_text}"})
+
+        contents = [pdf_file, prompt]
+
+        model = GenerativeModel(model_name=MODEL_ID)
+        response = model.generate_content(contents)
+        response_text = response.text
+
+        save_history(db, user_id, prompt_text, response_text, session_id)
+
+        return {"response_text": response_text, "session_id": session_id}
+    except Exception as e:
+        logger.error(f"Error processing pdf: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process pdf")
+
+@app.get("/api/history/")
+async def get_chat_history(token: str = Depends(oauth2_scheme), db: sqlite3.Connection = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("user_id")
+        session_id = payload.get("session_id")
+        if user_id is None or session_id is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+        history = get_history(db, user_id, session_id)
+        return {"history": history}
+    except jwt.ExpiredSignatureError:
+        logger.error("Token expired")
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.PyJWTError as e:
+        logger.error(f"JWT error: {e}")
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    except Exception as e:
+        logger.error(f"Error retrieving chat history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve chat history")
+
+
+@app.post("/api/transcribe/")
+async def transcribe_audio(file: UploadFile = File(...)):
+    if not file:
+        logger.error("No file provided for transcription (backend)")
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    audio_data = await file.read()
+    file_size = len(audio_data)
+    logger.info(f"Received audio file: {file.filename}, size: {file_size} bytes, content type: {file.content_type} (backend)")
+
+    if file_size == 0:
+        logger.error("Empty audio file provided for transcription (backend)")
+        raise HTTPException(status_code=400, detail="Empty audio file provided")
+
+    try:
+        # Convert audio data to a format compatible with Google Speech-to-Text
+        audio_segment = AudioSegment.from_file(io.BytesIO(audio_data))
+        audio_segment = audio_segment.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+        wav_io = io.BytesIO()
+        audio_segment.export(wav_io, format="wav")
+        wav_io.seek(0)
+        audio_content = wav_io.read()
+
+        # Prepare the audio data for Google Speech-to-Text API
+        audio = speech.RecognitionAudio(content=audio_content)
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=16000,  # Use the sample rate we set in the conversion
+            language_code="en-US",
+            enable_automatic_punctuation=True
+        )
+
+        # Attempt to recognize speech using the Google API
+        logger.info("Sending request to Google Speech-to-Text API (backend)")
+        response = speech_recognition_client.recognize(config=config, audio=audio)
+        
+        if response.results:
+            transcript = ' '.join([result.alternatives[0].transcript for result in response.results])
+            logger.info(f"Transcription successful: {transcript} (backend)")
+            return {"transcription": transcript}
+        else:
+            logger.info("No transcription results returned by the API (backend)")
+            return {"transcription": ""}
+    except Exception as e:
+        logger.error("Error during transcription (backend):", exc_info=True)
+        if hasattr(e, 'response') and e.response:
+            logger.error(f"API response error: {e.response} (backend)")
+        return JSONResponse(status_code=500, content={"message": f"Error during transcription: {str(e)} (backend)"})
+
+# Endpoint to get the TTS configuration
+@app.get("/api/ttsconfig/")
+async def get_tts_configuration():
+    return {"voices": ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]}
+
+class SpeechRequest(BaseModel):
+    model: str
+    input: str
+    voice: str
+    response_format: str = "wav"
+    speed: float = 1.0
+
+@app.post("/api/tts/")
+async def generate_speech(speech_request: SpeechRequest):
+    try:
+        if speech_request.model not in ["tts-1", "tts-1-hd"]:
+            raise HTTPException(status_code=400, detail="Invalid model specified")
+        
+        if speech_request.voice not in ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]:
+            raise HTTPException(status_code=400, detail="Invalid voice specified")
+        
+        if not 0.25 <= speech_request.speed <= 4.0:
+            raise HTTPException(status_code=400, detail="Invalid speed specified")
+        
+        speech_file_path = Path("/tmp") / f"speech_{datetime.now().timestamp()}.wav"
+
+        with openai.audio.speech.with_streaming_response.create(
+            model=speech_request.model,
+            voice=speech_request.voice,
+            input=speech_request.input,
+        ) as response:
+            response.stream_to_file(speech_file_path)
+
+        with open(speech_file_path, "rb") as audio_file:
+            audio_content = audio_file.read()
+        
+        return {"audio_content": base64.b64encode(audio_content).decode('utf-8')}
+    
+    except openai.error.OpenAIError as e:
+        logger.error(f"OpenAI API error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate speech")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host=BACKENDHOST, port=BACKENDPORT)
