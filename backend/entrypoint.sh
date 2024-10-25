@@ -17,7 +17,7 @@ wait_for_db
 
 # Create tables
 echo "Creating database tables..."
-python -c "
+PYTHONPATH=/app python -c "
 from app.database import Base, sync_engine
 from app import models
 Base.metadata.create_all(bind=sync_engine)
@@ -25,7 +25,7 @@ Base.metadata.create_all(bind=sync_engine)
 
 # Run migrations
 echo "Running database migrations..."
-alembic upgrade head
+PYTHONPATH=/app alembic upgrade head
 
 # Start the application
 echo "Starting the application..."

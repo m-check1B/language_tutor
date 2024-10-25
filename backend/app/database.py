@@ -1,10 +1,11 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.ext.declarative import DeclarativeMeta
 from .config import settings
 
 # Create async engine
 engine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    settings.DATABASE_URL,
     echo=True,
     future=True
 )
@@ -16,7 +17,7 @@ AsyncSessionLocal = sessionmaker(
     expire_on_commit=False
 )
 
-Base = declarative_base()
+Base: DeclarativeMeta = declarative_base()
 
 async def get_db():
     async with AsyncSessionLocal() as session:
@@ -34,7 +35,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 sync_engine = create_engine(
-    settings.DATABASE_URL,
+    settings.SYNC_DATABASE_URL,
     echo=True,
     future=True
 )

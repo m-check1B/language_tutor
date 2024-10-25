@@ -5,11 +5,6 @@ import aiofiles
 import os
 import uuid
 from datetime import datetime
-from deepgram import (
-    DeepgramClient,
-    PrerecordedOptions,
-    FileSource
-)
 from openai import AsyncOpenAI
 import magic
 from pathlib import Path
@@ -25,9 +20,17 @@ from ..config import Settings
 router = APIRouter()
 settings = Settings()
 
-# Initialize clients
-deepgram = DeepgramClient(settings.DEEPGRAM_API_KEY)
+# Initialize OpenAI client
 openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
+# Initialize Deepgram client if API key is available
+deepgram = None
+if settings.DEEPGRAM_API_KEY and settings.DEEPGRAM_API_KEY != "your-deepgram-api-key":
+    try:
+        from deepgram import Deepgram
+        deepgram = Deepgram(settings.DEEPGRAM_API_KEY)
+    except Exception as e:
+        print(f"Failed to initialize Deepgram: {str(e)}")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -92,20 +95,22 @@ async def transcribe_audio(
 ):
     if not file:
         raise HTTPException(status_code=400, detail="No file provided")
+    
+    if not deepgram:
+        raise HTTPException(status_code=503, detail="Speech recognition service is not available")
 
     filepath = await save_upload_file(file)
     
     try:
         with open(filepath, 'rb') as audio:
-            source = FileSource(buffer=audio, mimetype=file.content_type)
-            options = PrerecordedOptions(
-                smart_format=True,
-                model="nova-2-enterprise",
-                language="en-US"
-            )
+            payload = {
+                "smart_format": True,
+                "model": "nova-2-enterprise",
+                "language": "en-US"
+            }
             
-            response = await deepgram.transcription.prerecorded(source, options)
-            transcript = response.results.channels[0].alternatives[0].transcript
+            response = await deepgram.transcription.prerecorded.v('1').transcribe_file(audio, payload)
+            transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
             
             return {
                 "text": transcript,
@@ -172,6 +177,8 @@ async def process_file(
             # Extract audio from video and transcribe
             processed_text = "Video processing not implemented yet"
         elif media_type == 'audio':
+            if not deepgram:
+                raise HTTPException(status_code=503, detail="Speech recognition service is not available")
             # Transcribe audio
             processed_text = await transcribe_audio(file, current_user, db)
 

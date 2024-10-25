@@ -1,25 +1,35 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from app.ai_helper import speech_to_text, generate_ai_response, process_voice_message
+from deepgram import (
+    DeepgramClient,
+    PrerecordedOptions,
+    FileSource
+)
 
 @pytest.mark.asyncio
 async def test_speech_to_text():
     mock_audio_data = b'fake_audio_data'
     mock_transcription = "This is a test transcription."
 
-    with patch('app.ai_helper.deepgram') as mock_deepgram:
-        mock_deepgram.transcription.prerecorded.return_value = {
-            'results': {
-                'channels': [{'alternatives': [{'transcript': mock_transcription}]}]
-            }
-        }
+    # Create a mock response object that matches Deepgram SDK v3 structure
+    mock_response = MagicMock()
+    mock_response.results.channels = [
+        MagicMock(alternatives=[MagicMock(transcript=mock_transcription)])
+    ]
+
+    with patch('app.ai_helper.deepgram', new_callable=MagicMock) as mock_deepgram:
+        mock_deepgram.transcription.prerecorded.return_value = mock_response
 
         result = await speech_to_text(mock_audio_data, 'en-US')
         assert result == mock_transcription
-        mock_deepgram.transcription.prerecorded.assert_called_once_with(
-            {'buffer': mock_audio_data, 'mimetype': 'audio/wav'},
-            {'language': 'en-US'}
-        )
+        
+        # Verify the call matches v3 SDK structure
+        mock_deepgram.transcription.prerecorded.assert_called_once()
+        call_args = mock_deepgram.transcription.prerecorded.call_args
+        assert isinstance(call_args[0][0], FileSource)
+        assert isinstance(call_args[0][1], PrerecordedOptions)
+        assert call_args[0][1].language == 'en-US'
 
 def test_generate_ai_response():
     mock_user_message = "Hello, AI!"

@@ -7,14 +7,18 @@ load_dotenv()
 
 class Settings(BaseModel):
     # Database
-    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "language_tutor")
-    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "dev_password_123")
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "language_tutor_db")
-    POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
+    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
+    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "language_tutor")
+    POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "db")
     POSTGRES_PORT: str = os.getenv("POSTGRES_PORT", "5432")
     
     @property
     def DATABASE_URL(self) -> str:
+        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+    
+    @property
+    def SYNC_DATABASE_URL(self) -> str:
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
     
     # Security
@@ -37,7 +41,7 @@ class Settings(BaseModel):
 
     # Server Settings
     SERVER_HOST: str = os.getenv("SERVER_HOST", "0.0.0.0")
-    SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8001"))
+    SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8000"))
     
     # Auth Service
     AUTH_SERVICE_URL: str = os.getenv("AUTH_SERVICE_URL", "http://localhost:8000/api")

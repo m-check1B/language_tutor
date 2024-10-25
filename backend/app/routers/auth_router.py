@@ -1,68 +1,43 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from ..models import User
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from .. import models, schemas, auth
 from ..database import get_db
-from passlib.context import CryptContext
-from jose import jwt
-from datetime import datetime, timedelta
+from typing import Annotated
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-SECRET_KEY = "your-secret-key"  # In production, use the one from environment variables
-ALGORITHM = "HS256"
-
-class UserCreate(BaseModel):
-    username: str
-    email: str
-    password: str
-
-class UserLogin(BaseModel):
-    email: str
-    password: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=1)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-@router.post("/register")
-async def register(user: UserCreate, db: Session = Depends(get_db)):
-    # Check if user already exists
-    db_user = db.query(User).filter(User.email == user.email).first()
+@router.post("/register", response_model=schemas.User)
+async def register(user: schemas.UserCreate, db: AsyncSession = Depends(get_db)):
+    # Check if user with this email already exists
+    result = await db.execute(
+        select(models.User).where(models.User.email == user.email)
+    )
+    db_user = result.scalar_one_or_none()
+    
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Create new user
-    hashed_password = pwd_context.hash(user.password)
-    db_user = User(
-        username=user.username,
-        email=user.email,
-        hashed_password=hashed_password
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    hashed_password = auth.get_password_hash(user.password)
+    db_user = models.User(email=user.email, hashed_password=hashed_password)
     
-    # Create access token
-    access_token = create_access_token({"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+    
+    return db_user
 
-@router.post("/login")
-async def login(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
-    if not db_user or not pwd_context.verify(user.password, db_user.hashed_password):
+@router.post("/login", response_model=schemas.Token)
+async def login(form_data: schemas.UserLogin):
+    user = await auth.authenticate_user(form_data.email, form_data.password)
+    if not user:
         raise HTTPException(
             status_code=401,
-            detail="Incorrect email or password"
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token = create_access_token({"sub": user.email})
+    access_token = auth.create_access_token(data={"sub": user.email})
+    
     return {"access_token": access_token, "token_type": "bearer"}
