@@ -3,25 +3,41 @@
     import { page } from '$app/stores';
     import { _ } from 'svelte-i18n';
     import { auth } from '$lib/stores/auth';
-    import { setupWebSocket } from '$lib/stores/stores';
+    import { setupWebSocket, wsConnection } from '$lib/stores/stores';
 
     let email = '';
     let password = '';
     let error = '';
+    let isLoading = false;
 
     async function handleSubmit() {
         error = '';
+        isLoading = true;
         try {
             const response = await auth.login(email, password);
-            if (response.access_token && response.session_id) {
-                auth.setToken(response.access_token, response.session_id);
-                await setupWebSocket();
-                goto(`/${$page.params.lang}/chat`);
-            } else {
+            if (!response || !response.access_token || !response.session_id) {
                 throw new Error('Invalid response from server');
             }
+
+            auth.setToken(response.access_token, response.session_id);
+            
+            // Try to establish WebSocket connection
+            try {
+                await setupWebSocket();
+                if (!$wsConnection.isConnected) {
+                    console.warn('WebSocket connection not established after login');
+                }
+            } catch (wsError) {
+                console.error('WebSocket setup error:', wsError);
+                // Continue with navigation even if WebSocket fails
+            }
+
+            goto(`/${$page.params.lang}/chat`);
         } catch (err) {
+            console.error('Login error:', err);
             error = err instanceof Error ? err.message : $_('auth.login.error');
+        } finally {
+            isLoading = false;
         }
     }
 </script>
@@ -45,6 +61,7 @@
                     autocomplete="email"
                     placeholder={$_('auth.login.emailPlaceholder', { default: 'Enter your email' })}
                     class="input-field"
+                    disabled={isLoading}
                 >
             </div>
 
@@ -60,10 +77,18 @@
                     autocomplete="current-password"
                     placeholder={$_('auth.login.passwordPlaceholder', { default: 'Enter your password' })}
                     class="input-field"
+                    disabled={isLoading}
                 >
             </div>
 
-            <button type="submit" class="btn-primary w-full">
+            <button 
+                type="submit" 
+                class="btn-primary w-full flex justify-center items-center"
+                disabled={isLoading}
+            >
+                {#if isLoading}
+                    <span class="animate-spin mr-2">⌛</span>
+                {/if}
                 {$_('auth.login.submit', { default: 'Login' })}
             </button>
 
@@ -95,12 +120,14 @@
         @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md 
                shadow-sm placeholder-gray-400 
                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-               dark:bg-gray-700 dark:text-white;
+               dark:bg-gray-700 dark:text-white
+               disabled:opacity-50 disabled:cursor-not-allowed;
     }
 
     .btn-primary {
         @apply bg-blue-600 text-white px-4 py-2 rounded-md font-medium
                hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-               dark:focus:ring-offset-gray-800 transition-colors;
+               dark:focus:ring-offset-gray-800 transition-colors
+               disabled:opacity-50 disabled:cursor-not-allowed;
     }
 </style>

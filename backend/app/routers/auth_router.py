@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Response, Cookie, status
+from fastapi import APIRouter, Depends, HTTPException, Response, Cookie, status, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import or_
 import jwt
 from passlib.context import CryptContext
+from pydantic import BaseModel
 from ..database import get_db
 from ..models import User, AuthSession
 from ..config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
@@ -16,6 +17,10 @@ router = APIRouter(prefix="/api/auth")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 logger = logging.getLogger(__name__)
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -88,7 +93,8 @@ async def register(
             "access_token": access_token,
             "token_type": "bearer",
             "user_id": new_user.id,
-            "username": new_user.username
+            "username": new_user.username,
+            "session_id": session_id
         }
     except HTTPException:
         raise
@@ -102,21 +108,21 @@ async def register(
 @router.post("/login")
 async def login(
     response: Response,
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: LoginRequest,
     db: AsyncSession = Depends(get_db)
 ):
     try:
         # Find user
         stmt = select(User).where(
             or_(
-                User.email == form_data.username,
-                User.username == form_data.username
+                User.email == login_data.username,
+                User.username == login_data.username
             )
         )
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
 
-        if not user or not pwd_context.verify(form_data.password, user.password_hash):
+        if not user or not pwd_context.verify(login_data.password, user.password_hash):
             raise HTTPException(
                 status_code=401,
                 detail="Incorrect username or password"
@@ -151,7 +157,8 @@ async def login(
             "access_token": access_token,
             "token_type": "bearer",
             "user_id": user.id,
-            "username": user.username
+            "username": user.username,
+            "session_id": session_id
         }
     except HTTPException:
         raise

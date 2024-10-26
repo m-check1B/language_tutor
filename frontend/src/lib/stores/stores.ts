@@ -32,6 +32,8 @@ interface Agent {
 // Constants
 const WS_RECONNECT_INTERVAL = 5000;
 const WS_MAX_RECONNECT_ATTEMPTS = 5;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
+const WS_URL = API_URL.replace('http', 'ws');
 
 // Initial states
 const initialWebSocketState: WebSocketState = {
@@ -81,10 +83,13 @@ export async function setupWebSocket() {
         return;
     }
 
-    const wsUrl = `ws://localhost:8001/api/ws/${token}?session=${sessionId}`;
+    const wsUrl = `${WS_URL}/ws/${token}?session=${sessionId}`;
+    console.log('Connecting to WebSocket:', wsUrl);
+    
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
+        console.log('WebSocket connected');
         wsState.update(state => ({
             ...state,
             socket,
@@ -107,6 +112,7 @@ export async function setupWebSocket() {
     socket.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
+            console.log('WebSocket message received:', data);
             wsState.update(state => ({ ...state, lastMessage: data }));
 
             if (data.type === 'message') {
@@ -132,7 +138,8 @@ export async function setupWebSocket() {
         }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
+        console.log('WebSocket closed:', event);
         wsConnection.set({ isConnected: false });
         wsState.update(state => {
             const newState = {
@@ -178,11 +185,13 @@ export async function setupWebSocket() {
 export function sendWebSocketMessage(message: string) {
     wsState.update(state => {
         if (state.socket?.readyState === WebSocket.OPEN) {
-            state.socket.send(JSON.stringify({
+            const messageData = {
                 type: 'chat',
                 content: message,
                 session_id: get(authSessionId)
-            }));
+            };
+            console.log('Sending WebSocket message:', messageData);
+            state.socket.send(JSON.stringify(messageData));
         }
         return state;
     });

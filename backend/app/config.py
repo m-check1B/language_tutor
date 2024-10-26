@@ -34,13 +34,13 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 # Server settings
 HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8000"))
+PORT = int(os.getenv("PORT", "8001"))  # Changed to 8001 to match frontend expectations
 
 # CORS settings
-CORS_ORIGINS = os.getenv(
-    "CORS_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173"
-).split(",")
+# Include both HTTP and WebSocket origins
+http_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+ws_origins = ["ws://localhost:5173", "ws://127.0.0.1:5173"]
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", ",".join(http_origins + ws_origins)).split(",")
 
 CORS_SETTINGS = {
     "allow_origins": CORS_ORIGINS,

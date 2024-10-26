@@ -45,16 +45,15 @@ function createAuthStore() {
         },
         login: async (email: string, password: string) => {
             try {
-                const formData = new URLSearchParams();
-                formData.append('username', email);
-                formData.append('password', password);
-
                 const response = await fetch(`${API_URL}/auth/login`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Content-Type': 'application/json',
                     },
-                    body: formData,
+                    body: JSON.stringify({
+                        username: email,
+                        password: password
+                    }),
                     credentials: 'include',
                 });
 

@@ -6,21 +6,39 @@
     import ChatInterface from '$lib/components/ChatInterface.svelte';
     import AgentsManagement from '$lib/components/AgentsManagement.svelte';
     import ConversationsManagement from '$lib/components/ConversationsManagement.svelte';
-    import { setupWebSocket, disconnectWebSocket } from '$lib/stores/stores';
+    import { setupWebSocket, disconnectWebSocket, wsConnection } from '$lib/stores/stores';
 
     $: currentLang = $page.params.lang;
+    let connectionAttempts = 0;
+    const MAX_CONNECTION_ATTEMPTS = 3;
 
-    onMount(async () => {
-        if ($auth.isLoggedIn && $auth.token && $auth.sessionId) {
-            await setupWebSocket();
+    async function initializeWebSocket() {
+        if ($auth.isLoggedIn && $auth.token && $auth.sessionId && !$wsConnection.isConnected) {
+            try {
+                await setupWebSocket();
+                connectionAttempts = 0; // Reset attempts on successful connection
+            } catch (error) {
+                console.error('WebSocket connection error:', error);
+                connectionAttempts++;
+                
+                if (connectionAttempts < MAX_CONNECTION_ATTEMPTS) {
+                    // Retry after a delay
+                    setTimeout(initializeWebSocket, 2000);
+                }
+            }
         }
+    }
+
+    onMount(() => {
+        initializeWebSocket();
         return () => {
             disconnectWebSocket();
         };
     });
 
-    $: if ($auth.isLoggedIn && $auth.token && $auth.sessionId) {
-        setupWebSocket();
+    // Watch for auth changes and reinitialize WebSocket if needed
+    $: if ($auth.isLoggedIn && $auth.token && $auth.sessionId && !$wsConnection.isConnected) {
+        initializeWebSocket();
     }
 </script>
 
@@ -52,6 +70,13 @@
 
                 <!-- Main Content - Chat Interface -->
                 <div class="lg:col-span-3">
+                    {#if !$wsConnection.isConnected}
+                        <div class="bg-yellow-100 dark:bg-yellow-900 p-4 rounded-lg mb-4">
+                            <p class="text-yellow-800 dark:text-yellow-200">
+                                {$_('chat.connecting', { default: 'Connecting to chat server...' })}
+                            </p>
+                        </div>
+                    {/if}
                     <ChatInterface />
                 </div>
             </div>
