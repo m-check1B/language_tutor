@@ -2,6 +2,7 @@ import { writable, derived } from 'svelte/store';
 
 interface AuthStore {
     token: string | null;
+    sessionId: string | null;
     isLoggedIn: boolean;
 }
 
@@ -10,6 +11,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
 function createAuthStore() {
     const { subscribe, set, update } = writable<AuthStore>({
         token: null,
+        sessionId: null,
         isLoggedIn: false
     });
 
@@ -62,7 +64,11 @@ function createAuthStore() {
                 }
 
                 const data = await response.json();
-                set({ token: data.access_token, isLoggedIn: true });
+                set({ 
+                    token: data.access_token, 
+                    sessionId: data.session_id,
+                    isLoggedIn: true 
+                });
                 return data;
             } catch (error) {
                 throw error;
@@ -74,10 +80,10 @@ function createAuthStore() {
                     method: 'POST',
                     credentials: 'include',
                 });
-                set({ token: null, isLoggedIn: false });
+                set({ token: null, sessionId: null, isLoggedIn: false });
             } catch (error) {
                 console.error('Logout failed:', error);
-                set({ token: null, isLoggedIn: false });
+                set({ token: null, sessionId: null, isLoggedIn: false });
             }
         },
         refreshToken: async () => {
@@ -92,20 +98,25 @@ function createAuthStore() {
                 }
 
                 const data = await response.json();
-                set({ token: data.access_token, isLoggedIn: true });
+                update(state => ({
+                    ...state,
+                    token: data.access_token,
+                    isLoggedIn: true
+                }));
                 return data.access_token;
             } catch (error) {
                 console.error('Token refresh failed:', error);
-                set({ token: null, isLoggedIn: false });
+                set({ token: null, sessionId: null, isLoggedIn: false });
                 throw error;
             }
         },
-        setToken: (token: string) => {
-            set({ token, isLoggedIn: true });
+        setToken: (token: string, sessionId: string) => {
+            set({ token, sessionId, isLoggedIn: true });
         }
     };
 }
 
 export const auth = createAuthStore();
-export const authSessionId = writable<string | null>(null);
 export const isLoggedIn = derived(auth, $auth => $auth.isLoggedIn);
+export const authToken = derived(auth, $auth => $auth.token);
+export const authSessionId = derived(auth, $auth => $auth.sessionId);

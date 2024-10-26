@@ -23,12 +23,33 @@ kill_port() {
 command_exists node || handle_error "Node.js is not installed"
 command_exists npm || handle_error "npm is not installed"
 command_exists python || handle_error "Python is not installed"
+command_exists docker || handle_error "Docker is not installed"
+command_exists docker-compose || handle_error "Docker Compose is not installed"
 
 # Kill any processes using our ports
 echo "Cleaning up existing processes..."
 kill_port 8001
 kill_port 5173
 kill_port 5174
+kill_port 5432
+
+# Start PostgreSQL container
+echo "Starting PostgreSQL container..."
+docker compose up db -d
+
+# Wait for PostgreSQL to be ready
+echo "Waiting for PostgreSQL to be ready..."
+for i in {1..30}; do
+    if docker compose exec db pg_isready -U postgres; then
+        break
+    fi
+    echo "Waiting for PostgreSQL to start... ($i/30)"
+    sleep 1
+done
+
+if ! docker compose exec db pg_isready -U postgres; then
+    handle_error "PostgreSQL failed to start"
+fi
 
 # Create and activate Python virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
@@ -42,9 +63,9 @@ source venv/bin/activate || handle_error "Failed to activate virtual environment
 # Create necessary directories with proper permissions
 echo "Creating necessary directories..."
 mkdir -p backend/logs
-chmod 777 backend/logs
+chmod 777 backend/logs || true
 mkdir -p backend/uploads
-chmod 777 backend/uploads
+chmod 777 backend/uploads || true
 
 # Install backend dependencies
 echo "Installing backend dependencies..."
@@ -79,6 +100,7 @@ FRONTEND_PID=$!
 cleanup() {
     echo "Shutting down services..."
     kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
+    docker compose down
     deactivate
     exit 0
 }

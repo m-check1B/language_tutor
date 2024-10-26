@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import { chatHistory } from '../stores/stores';
-  import { auth } from '../stores/auth';
+  import { auth, authToken, authSessionId } from '../stores/auth';
   import { get } from 'svelte/store';
 
   let isLoading: boolean = true;
@@ -20,11 +20,19 @@
 
   async function loadConversations() {
     try {
-      const authState = get(auth);
+      const token = get(authToken);
+      const sessionId = get(authSessionId);
+      
+      if (!token || !sessionId) {
+        console.error('Missing auth token or session ID');
+        return;
+      }
+
       const response = await fetch(`${API_URL}/chat/conversations`, {
         headers: {
-          'Authorization': `Bearer ${authState.token}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
         },
         credentials: 'include'
       });
@@ -48,12 +56,20 @@
 
   async function handleDeleteConversation(id: number) {
     try {
-      const authState = get(auth);
+      const token = get(authToken);
+      const sessionId = get(authSessionId);
+      
+      if (!token || !sessionId) {
+        console.error('Missing auth token or session ID');
+        return;
+      }
+
       const response = await fetch(`${API_URL}/chat/conversations/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${authState.token}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
         },
         credentials: 'include'
       });
@@ -77,6 +93,10 @@
       loadConversations();
     }
   });
+
+  $: if ($auth.isLoggedIn && $authToken && $authSessionId) {
+    loadConversations();
+  }
 
   function handleKeyDown(event: KeyboardEvent, conversation: Conversation) {
     if (event.key === 'Enter' || event.key === ' ') {

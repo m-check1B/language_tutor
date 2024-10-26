@@ -59,12 +59,17 @@ ENABLE_WEBSOCKET = os.getenv("ENABLE_WEBSOCKET", "true").lower() == "true"
 ENABLE_TTS = os.getenv("ENABLE_TTS", "true").lower() == "true"
 
 # LLM settings
-DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4-turbo-preview")
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
 DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.7"))
 DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "1000"))
 DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "1.0"))
 DEFAULT_FREQUENCY_PENALTY = float(os.getenv("DEFAULT_FREQUENCY_PENALTY", "0.0"))
 DEFAULT_PRESENCE_PENALTY = float(os.getenv("DEFAULT_PRESENCE_PENALTY", "0.0"))
+
+# Agent settings
+DEFAULT_AGENT_PROVIDER = os.getenv("DEFAULT_AGENT_PROVIDER", "openai")
+DEFAULT_AGENT_MODEL = os.getenv("DEFAULT_AGENT_MODEL", "gpt-4o-mini")
+DEFAULT_AGENT_VOICE = os.getenv("DEFAULT_AGENT_VOICE", "alloy")
 
 # TTS settings
 DEFAULT_VOICE = os.getenv("DEFAULT_VOICE", "alloy")
@@ -91,7 +96,7 @@ WS_RECONNECT_INTERVAL = int(os.getenv("WS_RECONNECT_INTERVAL", "5"))
 WS_MAX_RECONNECT_ATTEMPTS = int(os.getenv("WS_MAX_RECONNECT_ATTEMPTS", "5"))
 
 # System prompts
-DEFAULT_SYSTEM_PROMPT = """You are a highly skilled and patient language tutor. Your role is to:
+DEFAULT_SYSTEM_PROMPT = os.getenv("DEFAULT_SYSTEM_PROMPT", """You are a highly skilled and patient language tutor. Your role is to:
 
 1. Help users improve their language skills through natural conversation
 2. Correct grammar and pronunciation mistakes gently and constructively
@@ -110,7 +115,7 @@ Remember to:
 - Use examples that are relevant to real-life situations
 - Adjust your language level to match the user's proficiency
 - Celebrate progress and provide constructive feedback
-- Keep the conversation engaging and interactive"""
+- Keep the conversation engaging and interactive""")
 
 # Logging settings
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -124,7 +129,7 @@ LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 # Agent providers
 AVAILABLE_PROVIDERS = {
     "openai": {
-        "models": ["gpt-4-turbo-preview", "gpt-4", "gpt-3.5-turbo"],
+        "models": ["gpt-4o-mini", "gpt-4-turbo-preview", "gpt-4", "gpt-3.5-turbo"],
         "api_key": OPENAI_API_KEY
     },
     "anthropic": {
@@ -132,6 +137,15 @@ AVAILABLE_PROVIDERS = {
         "api_key": ANTHROPIC_API_KEY
     }
 }
+
+# Default provider and model if not specified
+DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", "openai")
+if DEFAULT_PROVIDER not in AVAILABLE_PROVIDERS:
+    DEFAULT_PROVIDER = "openai"
+
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
+if DEFAULT_MODEL not in AVAILABLE_PROVIDERS[DEFAULT_PROVIDER]["models"]:
+    DEFAULT_MODEL = "gpt-4o-mini"
 
 # Validate required settings
 def validate_settings():

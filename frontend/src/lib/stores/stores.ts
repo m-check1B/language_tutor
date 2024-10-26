@@ -1,5 +1,7 @@
 import { writable, derived } from 'svelte/store';
 import { browser } from '$app/environment';
+import { auth, authToken, authSessionId } from './auth';
+import { get } from 'svelte/store';
 
 // Types
 interface WebSocketState {
@@ -19,6 +21,14 @@ interface ChatMessage {
     session_id?: string;
 }
 
+interface Agent {
+    id: number;
+    name: string;
+    provider: string;
+    model: string;
+    system_prompt: string;
+}
+
 // Constants
 const WS_RECONNECT_INTERVAL = 5000;
 const WS_MAX_RECONNECT_ATTEMPTS = 5;
@@ -36,10 +46,40 @@ const initialWebSocketState: WebSocketState = {
 export const wsState = writable<WebSocketState>(initialWebSocketState);
 export const chatMessages = writable<ChatMessage[]>([]);
 export const currentSessionId = writable<string | null>(null);
+export const chatHistory = writable<ChatMessage[]>([]);
+export const userMessage = writable<string>('');
+export const isAudioRecording = writable<boolean>(false);
+export const isVideoRecording = writable<boolean>(false);
+export const flashingButtons = writable<boolean>(false);
+export const isLoading = writable<boolean>(false);
+export const selectedAgent = writable<Agent | null>(null);
+export const transcriptionError = writable<string | null>(null);
+export const responseError = writable<string | null>(null);
+export const selectedVoice = writable<string>('alloy');
+export const speechSpeed = writable<number>(1.0);
+export const wsConnection = writable<{isConnected: boolean}>({ isConnected: false });
+
+// Agent-related stores
+export const agents = writable<Agent[]>([]);
+export const agentProvider = writable<string>('openai');
+export const agentName = writable<string>('');
+export const agentSystemPrompt = writable<string>('');
+export const agentModel = writable<string>('');
+export const agentVoice = writable<string>('alloy');
+export const availableModels = writable<string[]>([]);
+export const errorStore = writable<string | null>(null);
 
 // WebSocket connection management
-function setupWebSocket(token: string, sessionId: string) {
+export async function setupWebSocket() {
     if (!browser) return;
+
+    const token = get(authToken);
+    const sessionId = get(authSessionId);
+
+    if (!token || !sessionId) {
+        console.error('Missing token or session ID');
+        return;
+    }
 
     const wsUrl = `ws://localhost:8001/api/ws/${token}?session=${sessionId}`;
     const socket = new WebSocket(wsUrl);
@@ -52,6 +92,7 @@ function setupWebSocket(token: string, sessionId: string) {
             reconnectAttempts: 0,
             error: null
         }));
+        wsConnection.set({ isConnected: true });
 
         // Start heartbeat
         const heartbeat = setInterval(() => {
@@ -92,6 +133,7 @@ function setupWebSocket(token: string, sessionId: string) {
     };
 
     socket.onclose = () => {
+        wsConnection.set({ isConnected: false });
         wsState.update(state => {
             const newState = {
                 ...state,
@@ -101,7 +143,7 @@ function setupWebSocket(token: string, sessionId: string) {
 
             if (state.reconnectAttempts < WS_MAX_RECONNECT_ATTEMPTS) {
                 setTimeout(() => {
-                    setupWebSocket(token, sessionId);
+                    setupWebSocket();
                 }, WS_RECONNECT_INTERVAL);
 
                 return {
@@ -132,22 +174,29 @@ function setupWebSocket(token: string, sessionId: string) {
     };
 }
 
-// Derived store for connection status
-export const isConnected = derived(wsState, $state => $state.connected);
-
 // Helper function to send messages
-export function sendMessage(content: string, sessionId: string) {
+export function sendWebSocketMessage(message: string) {
     wsState.update(state => {
         if (state.socket?.readyState === WebSocket.OPEN) {
             state.socket.send(JSON.stringify({
                 type: 'chat',
-                content,
-                session_id: sessionId
+                content: message,
+                session_id: get(authSessionId)
             }));
         }
         return state;
     });
 }
 
-// Export the setup function
-export { setupWebSocket };
+// Export disconnect function
+export function disconnectWebSocket() {
+    wsState.update(state => {
+        if (state.socket?.readyState === WebSocket.OPEN) {
+            state.socket.close();
+        }
+        return {
+            ...initialWebSocketState
+        };
+    });
+    wsConnection.set({ isConnected: false });
+}

@@ -3,6 +3,7 @@
     import { page } from '$app/stores';
     import { _ } from 'svelte-i18n';
     import { auth } from '$lib/stores/auth';
+    import { setupWebSocket } from '$lib/stores/stores';
 
     let email = '';
     let password = '';
@@ -11,8 +12,14 @@
     async function handleSubmit() {
         error = '';
         try {
-            await auth.login(email, password);
-            goto(`/${$page.params.lang}/chat`);
+            const response = await auth.login(email, password);
+            if (response.access_token && response.session_id) {
+                auth.setToken(response.access_token, response.session_id);
+                await setupWebSocket();
+                goto(`/${$page.params.lang}/chat`);
+            } else {
+                throw new Error('Invalid response from server');
+            }
         } catch (err) {
             error = err instanceof Error ? err.message : $_('auth.login.error');
         }
@@ -78,3 +85,22 @@
         </p>
     </div>
 </div>
+
+<style lang="postcss">
+    .card {
+        @apply bg-white dark:bg-gray-800 shadow-lg rounded-lg p-8;
+    }
+
+    .input-field {
+        @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md 
+               shadow-sm placeholder-gray-400 
+               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+               dark:bg-gray-700 dark:text-white;
+    }
+
+    .btn-primary {
+        @apply bg-blue-600 text-white px-4 py-2 rounded-md font-medium
+               hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+               dark:focus:ring-offset-gray-800 transition-colors;
+    }
+</style>

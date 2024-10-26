@@ -3,6 +3,17 @@ from typing import Optional
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship, DeclarativeBase
 from sqlalchemy.ext.asyncio import AsyncAttrs
+from .config import (
+    DEFAULT_AGENT_PROVIDER,
+    DEFAULT_AGENT_MODEL,
+    DEFAULT_AGENT_VOICE,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_TOP_P,
+    DEFAULT_FREQUENCY_PENALTY,
+    DEFAULT_PRESENCE_PENALTY,
+    DEFAULT_SYSTEM_PROMPT
+)
 
 class Base(AsyncAttrs, DeclarativeBase):
     pass
@@ -26,15 +37,15 @@ class Agent(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
-    system_prompt = Column(Text, nullable=False)
-    provider = Column(String, nullable=False)
-    model = Column(String, nullable=False)
-    voice = Column(String)
-    temperature = Column(Float, default=0.7)
-    max_tokens = Column(Integer, default=1000)
-    top_p = Column(Float, default=1.0)
-    frequency_penalty = Column(Float, default=0.0)
-    presence_penalty = Column(Float, default=0.0)
+    system_prompt = Column(Text, nullable=False, default=DEFAULT_SYSTEM_PROMPT)
+    provider = Column(String, nullable=False, default=DEFAULT_AGENT_PROVIDER)
+    model = Column(String, nullable=False, default=DEFAULT_AGENT_MODEL)
+    voice = Column(String, default=DEFAULT_AGENT_VOICE)
+    temperature = Column(Float, default=DEFAULT_TEMPERATURE)
+    max_tokens = Column(Integer, default=DEFAULT_MAX_TOKENS)
+    top_p = Column(Float, default=DEFAULT_TOP_P)
+    frequency_penalty = Column(Float, default=DEFAULT_FREQUENCY_PENALTY)
+    presence_penalty = Column(Float, default=DEFAULT_PRESENCE_PENALTY)
     role = Column(String)
     connections = Column(String)
     tools = Column(String)

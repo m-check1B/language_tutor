@@ -10,16 +10,18 @@
     agentVoice,
     errorStore
   } from '../stores/stores';
+  import { auth, authToken, authSessionId } from '../stores/auth';
   import { get } from 'svelte/store';
 
   let isLoading: boolean = true;
   const dispatch = createEventDispatcher();
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api';
 
   // Get available options from environment variables
-  const availableProviders = import.meta.env.VITE_AVAILABLE_PROVIDERS.split(',');
-  const openaiModels = import.meta.env.VITE_OPENAI_MODELS.split(',');
-  const anthropicModels = import.meta.env.VITE_ANTHROPIC_MODELS.split(',');
-  const availableVoices = import.meta.env.VITE_AVAILABLE_VOICES.split(',');
+  const availableProviders = import.meta.env.VITE_AVAILABLE_PROVIDERS?.split(',') || ['openai', 'anthropic'];
+  const openaiModels = import.meta.env.VITE_OPENAI_MODELS?.split(',') || ['gpt-4-turbo-preview', 'gpt-3.5-turbo'];
+  const anthropicModels = import.meta.env.VITE_ANTHROPIC_MODELS?.split(',') || ['claude-3-opus', 'claude-3-sonnet'];
+  const availableVoices = import.meta.env.VITE_AVAILABLE_VOICES?.split(',') || ['alloy', 'echo', 'fable', 'nova', 'shimmer'];
 
   let availableModels: string[] = [];
 
@@ -43,6 +45,40 @@
     voice: string;
   }
 
+  async function loadAgents() {
+    try {
+      const token = get(authToken);
+      const sessionId = get(authSessionId);
+      
+      if (!token || !sessionId) {
+        console.error('Missing auth token or session ID');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/agents`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
+        },
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        agents.set(data);
+      } else {
+        const error = await response.json();
+        errorStore.set(error.detail || 'Failed to load agents');
+      }
+    } catch (error) {
+      console.error('Failed to load agents:', error);
+      errorStore.set('Failed to load agents');
+    } finally {
+      isLoading = false;
+    }
+  }
+
   async function handleSelectAgent(agent: Agent) {
     selectedAgent.set(agent);
     agentName.set(agent.name);
@@ -55,65 +91,112 @@
   function handleCreateAgent() {
     selectedAgent.set(null);
     agentName.set('');
-    agentSystemPrompt.set(import.meta.env.VITE_DEFAULT_SYSTEM_PROMPT);
-    agentProvider.set(import.meta.env.VITE_DEFAULT_PROVIDER);
-    agentModel.set(import.meta.env.VITE_DEFAULT_MODEL);
-    agentVoice.set(import.meta.env.VITE_DEFAULT_VOICE);
+    agentSystemPrompt.set(import.meta.env.VITE_DEFAULT_SYSTEM_PROMPT || 'You are a helpful assistant');
+    agentProvider.set(import.meta.env.VITE_DEFAULT_PROVIDER || 'openai');
+    agentModel.set(import.meta.env.VITE_DEFAULT_MODEL || 'gpt-4-turbo-preview');
+    agentVoice.set(import.meta.env.VITE_DEFAULT_VOICE || 'alloy');
   }
 
-  function handleSaveAgent() {
-    const newAgent: Agent = {
-      id: get(selectedAgent)?.id || Date.now(),
-      name: get(agentName),
-      system_prompt: get(agentSystemPrompt),
-      provider: get(agentProvider),
-      model: get(agentModel),
-      voice: get(agentVoice)
-    };
-
-    agents.update(currentAgents => {
-      const index = currentAgents.findIndex(a => a.id === newAgent.id);
-      if (index >= 0) {
-        currentAgents[index] = newAgent;
-        return [...currentAgents];
-      } else {
-        return [...currentAgents, newAgent];
+  async function handleSaveAgent() {
+    try {
+      const token = get(authToken);
+      const sessionId = get(authSessionId);
+      
+      if (!token || !sessionId) {
+        console.error('Missing auth token or session ID');
+        return;
       }
-    });
 
-    selectedAgent.set(newAgent);
+      const newAgent = {
+        id: get(selectedAgent)?.id,
+        name: get(agentName),
+        system_prompt: get(agentSystemPrompt),
+        provider: get(agentProvider),
+        model: get(agentModel),
+        voice: get(agentVoice)
+      };
+
+      const method = newAgent.id ? 'PUT' : 'POST';
+      const url = newAgent.id ? `${API_URL}/agents/${newAgent.id}` : `${API_URL}/agents`;
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
+        },
+        body: JSON.stringify(newAgent),
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const savedAgent = await response.json();
+        agents.update(currentAgents => {
+          const index = currentAgents.findIndex(a => a.id === savedAgent.id);
+          if (index >= 0) {
+            currentAgents[index] = savedAgent;
+            return [...currentAgents];
+          } else {
+            return [...currentAgents, savedAgent];
+          }
+        });
+        selectedAgent.set(savedAgent);
+      } else {
+        const error = await response.json();
+        errorStore.set(error.detail || 'Failed to save agent');
+      }
+    } catch (error) {
+      console.error('Failed to save agent:', error);
+      errorStore.set('Failed to save agent');
+    }
   }
 
-  function handleDeleteAgent() {
-    const currentAgent = get(selectedAgent);
-    if (currentAgent) {
-      agents.update(currentAgents => currentAgents.filter(a => a.id !== currentAgent.id));
-      handleCreateAgent();
+  async function handleDeleteAgent() {
+    try {
+      const currentAgent = get(selectedAgent);
+      if (!currentAgent) return;
+
+      const token = get(authToken);
+      const sessionId = get(authSessionId);
+      
+      if (!token || !sessionId) {
+        console.error('Missing auth token or session ID');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/agents/${currentAgent.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionId
+        },
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        agents.update(currentAgents => currentAgents.filter(a => a.id !== currentAgent.id));
+        handleCreateAgent();
+      } else {
+        const error = await response.json();
+        errorStore.set(error.detail || 'Failed to delete agent');
+      }
+    } catch (error) {
+      console.error('Failed to delete agent:', error);
+      errorStore.set('Failed to delete agent');
     }
   }
 
   onMount(() => {
-    // For testing, create some dummy agents
-    agents.set([
-      {
-        id: 1,
-        name: "Language Tutor",
-        system_prompt: import.meta.env.VITE_DEFAULT_SYSTEM_PROMPT,
-        provider: "openai",
-        model: "gpt-4-turbo-preview",
-        voice: "alloy"
-      },
-      {
-        id: 2,
-        name: "Grammar Expert",
-        system_prompt: "You are a grammar expert",
-        provider: "anthropic",
-        model: "claude-3-opus",
-        voice: "nova"
-      }
-    ]);
-    isLoading = false;
+    if (get(auth).isLoggedIn) {
+      loadAgents();
+    }
   });
+
+  $: if ($auth.isLoggedIn && $authToken && $authSessionId) {
+    loadAgents();
+  }
 </script>
 
 <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl shadow-xl p-6">

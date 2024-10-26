@@ -6,8 +6,22 @@
     import ChatInterface from '$lib/components/ChatInterface.svelte';
     import AgentsManagement from '$lib/components/AgentsManagement.svelte';
     import ConversationsManagement from '$lib/components/ConversationsManagement.svelte';
+    import { setupWebSocket, disconnectWebSocket } from '$lib/stores/stores';
 
     $: currentLang = $page.params.lang;
+
+    onMount(async () => {
+        if ($auth.isLoggedIn && $auth.token && $auth.sessionId) {
+            await setupWebSocket();
+        }
+        return () => {
+            disconnectWebSocket();
+        };
+    });
+
+    $: if ($auth.isLoggedIn && $auth.token && $auth.sessionId) {
+        setupWebSocket();
+    }
 </script>
 
 <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
