@@ -1,53 +1,20 @@
 import { browser } from '$app/environment';
 import { init, register } from 'svelte-i18n';
-import { derived, writable } from 'svelte/store';
 
 const defaultLocale = 'en';
-export const locale = writable(defaultLocale);
-export const locales = {
-    en: 'English',
-    cs: 'Čeština',
-    es: 'Español'
+
+const load = async (locale: string) => {
+    const module = await import(`./${locale}.json`);
+    return module.default;
 };
 
-// Initialize translations
-export function setupI18n({ withLocale: _locale } = { withLocale: defaultLocale }) {
-    // Register translations
-    register('en', () => import('./en.json'));
-    register('cs', () => import('./cs.json'));
-    register('es', () => import('./es.json'));
+export const setupI18n = async ({ withLocale: _locale } = { withLocale: defaultLocale }) => {
+    register('en', () => load('en'));
+    register('cs', () => load('cs'));
+    register('es', () => load('es'));
 
-    init({
+    await init({
         fallbackLocale: defaultLocale,
-        initialLocale: _locale
+        initialLocale: browser ? window.navigator.language.split('-')[0] : defaultLocale,
     });
-}
-
-// Load translations
-export async function loadTranslations(newLocale: string) {
-    if (!Object.keys(locales).includes(newLocale)) {
-        newLocale = defaultLocale;
-    }
-
-    // If we're in the browser, update the locale
-    if (browser) {
-        locale.set(newLocale);
-    }
-    
-    setupI18n({ withLocale: newLocale });
-    
-    // Return the locale for SSR
-    return {
-        locale: newLocale
-    };
-}
-
-// Initialize with default locale
-if (browser) {
-    setupI18n();
-}
-
-export default {
-    setupI18n,
-    loadTranslations
 };

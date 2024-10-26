@@ -7,7 +7,6 @@ from .config import (
     CORS_SETTINGS,
     LOG_LEVEL,
     LOG_FORMAT,
-    LOG_FILE,
     ENABLE_AUDIO,
     ENABLE_VIDEO,
     ENABLE_IMAGE,
@@ -16,14 +15,11 @@ from .config import (
     ENABLE_TTS
 )
 
-# Configure logging
+# Configure logging to console
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
     format=LOG_FORMAT,
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 

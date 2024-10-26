@@ -1,65 +1,43 @@
 {
-    "auth": {
-        "login": {
-            "title": "Přihlásit se",
-            "email": "E-mail:",
-            "password": "Heslo:",
-            "submit": "Přihlásit se",
-            "emailPlaceholder": "Zadejte svůj e-mail",
-            "passwordPlaceholder": "Zadejte své heslo",
-            "error": "Při přihlašování došlo k chybě",
-            "noAccount": "Nemáte účet?",
-            "registerLink": "Zaregistrujte se zde"
-        },
-        "register": {
-            "title": "Registrovat se",
-            "username": "Uživatelské jméno:",
-            "email": "E-mail:",
-            "password": "Heslo:",
-            "confirmPassword": "Potvrdit heslo:",
-            "submit": "Registrovat",
-            "usernamePlaceholder": "Zadejte své uživatelské jméno",
-            "emailPlaceholder": "Zadejte svůj e-mail",
-            "passwordPlaceholder": "Zadejte své heslo",
-            "confirmPasswordPlaceholder": "Potvrďte své heslo",
-            "error": "Při registraci došlo k chybě",
-            "passwordMismatch": "Hesla se neshodují",
-            "haveAccount": "Již máte účet?",
-            "loginLink": "Přihlaste se zde"
-        }
+    "home": {
+        "title": "Vítejte v Language Tutor",
+        "description": "Zlepšete své jazykové dovednosti s naším AI tutorem. Procvičujte konverzaci, učte se gramatiku a rozšiřujte svou slovní zásobu přirozeným způsobem.",
+        "getStarted": "Začít"
     },
     "chat": {
-        "title": "Jazykový tutor - Chat",
-        "messagePlaceholder": "Napište svou zprávu...",
-        "startRecording": "Začít nahrávat",
-        "stopRecording": "Zastavit nahrávání",
+        "loginRequired": "Pro přístup k chatu se prosím přihlaste",
+        "login": "Přihlásit se",
+        "placeholder": "Napište zprávu...",
         "send": "Odeslat",
-        "playAudio": "Přehrát audio",
-        "pauseAudio": "Pozastavit audio",
-        "errors": {
-            "microphoneAccess": "Nelze získat přístup k mikrofonu",
-            "sendMessage": "Nepodařilo se odeslat zprávu",
-            "sendAudio": "Nepodařilo se odeslat audio"
-        },
-        "notifications": {
-            "thinking": "Tutor přemýšlí...",
-            "recording": "Nahrávání...",
-            "processing": "Zpracování audia..."
-        }
+        "newChat": "Nový chat",
+        "recordAudio": "Nahrát audio",
+        "stopRecording": "Zastavit nahrávání",
+        "recordVideo": "Nahrát video",
+        "takePicture": "Vyfotit",
+        "sayItAgain": "Zopakovat",
+        "stopSpeaking": "Zastavit mluvení",
+        "uploadText": "Textový soubor",
+        "uploadPdf": "PDF soubor",
+        "uploadVideo": "Video soubor"
     },
-    "home": {
-        "title": "Vítejte v Jazykovém tutorovi",
-        "description": "Zlepšete své jazykové dovednosti s naším AI tutorem. Procvičujte konverzace, učte se gramatiku a rozšiřujte svou slovní zásobu přirozeným způsobem.",
-        "getStarted": "Začít",
-        "continueChat": "Pokračovat v učení"
-    },
-    "common": {
-        "loading": "Načítání...",
-        "error": "Došlo k chybě",
-        "retry": "Zkusit znovu",
-        "cancel": "Zrušit",
-        "save": "Uložit",
-        "delete": "Smazat",
-        "edit": "Upravit"
+    "agents": {
+        "saveAgent": "Uložit agenta",
+        "createAgent": "Vytvořit agenta",
+        "deleteAgent": "Smazat agenta",
+        "loading": "Načítání agentů...",
+        "noAgents": "Žádní agenti nenalezeni. Vytvořte nového agenta pro začátek.",
+        "name": "Jméno agenta",
+        "systemPrompt": "Systémový prompt",
+        "provider": "Poskytovatel",
+        "model": "Model",
+        "voice": "Hlas",
+        "temperature": "Teplota",
+        "maxTokens": "Max tokenů",
+        "topP": "Top P",
+        "frequencyPenalty": "Penalizace frekvence",
+        "presencePenalty": "Penalizace přítomnosti",
+        "role": "Role",
+        "connections": "Připojení",
+        "tools": "Nástroje"
     }
 }

@@ -39,6 +39,13 @@ fi
 # Activate virtual environment
 source venv/bin/activate || handle_error "Failed to activate virtual environment"
 
+# Create necessary directories with proper permissions
+echo "Creating necessary directories..."
+mkdir -p backend/logs
+chmod 777 backend/logs
+mkdir -p backend/uploads
+chmod 777 backend/uploads
+
 # Install backend dependencies
 echo "Installing backend dependencies..."
 cd backend
@@ -48,22 +55,8 @@ pip install -r requirements.txt || handle_error "Failed to install backend depen
 echo "Running database migrations..."
 PYTHONPATH=/home/matej/github/full_system/language_tutor/backend alembic upgrade head || handle_error "Failed to run migrations"
 
-# Update frontend environment with new backend port
-cd ../frontend
-echo "VITE_API_URL=http://localhost:8001
-VITE_WS_URL=ws://localhost:8001
-VITE_ENABLE_AUDIO=true
-VITE_ENABLE_VIDEO=true
-VITE_ENABLE_IMAGE=true
-VITE_ENABLE_PDF=true
-VITE_ENABLE_WEBSOCKET=true
-VITE_ENABLE_TTS=true
-VITE_DEFAULT_LOCALE=en
-VITE_SUPPORTED_LOCALES=en,cs,es" > .env
-
 # Start backend
 echo "Starting backend..."
-cd ../backend
 PYTHONPATH=/home/matej/github/full_system/language_tutor/backend uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 &
 BACKEND_PID=$!
 
@@ -71,6 +64,11 @@ BACKEND_PID=$!
 echo "Installing frontend dependencies..."
 cd ../frontend
 npm install || handle_error "Failed to install frontend dependencies"
+
+# Clean and rebuild frontend
+echo "Cleaning and rebuilding frontend..."
+rm -rf .svelte-kit build
+npm run build || handle_error "Failed to build frontend"
 
 # Start frontend
 echo "Starting frontend..."

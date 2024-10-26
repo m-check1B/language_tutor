@@ -1,9 +1,5 @@
-import { writable } from 'svelte/store';
-import { isLoggedIn, authSessionId } from './auth';
-import { get } from 'svelte/store';
-
-// Auth store
-export const authToken = writable<string | null>(null);
+import { writable, get } from 'svelte/store';
+import { auth, authSessionId } from './auth';
 
 // Chat stores
 export const chatHistory = writable<Array<{ text: string; isUser: boolean; audioUrl?: string }>>([]);
@@ -51,11 +47,11 @@ const maxReconnectAttempts = 5;
 const reconnectDelay = 1000;
 
 export function setupWebSocket() {
-    const token = get(authToken);
-    if (!token) return;
+    const authState = get(auth);
+    if (!authState.token) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/chat/ws/${token}`;
+    const wsUrl = `${protocol}//${window.location.host}/api/chat/ws/${authState.token}`;
     
     const socket = new WebSocket(wsUrl);
 
@@ -132,7 +128,7 @@ export async function sendAudioData(blob: Blob) {
     formData.append('audio', blob, 'recording.wav');
 
     try {
-        const token = get(authToken);
+        const authState = get(auth);
         formData.append('ttsSettings', JSON.stringify({
             voice: get(selectedVoice),
             speed: get(speechSpeed),
@@ -142,7 +138,7 @@ export async function sendAudioData(blob: Blob) {
         const response = await fetch('/api/chat/audio', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${authState.token}`
             },
             body: formData
         });

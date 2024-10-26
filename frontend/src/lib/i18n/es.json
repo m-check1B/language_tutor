@@ -1,65 +1,43 @@
 {
-    "auth": {
-        "login": {
-            "title": "Iniciar Sesión",
-            "email": "Correo electrónico:",
-            "password": "Contraseña:",
-            "submit": "Iniciar Sesión",
-            "emailPlaceholder": "Ingrese su correo electrónico",
-            "passwordPlaceholder": "Ingrese su contraseña",
-            "error": "Ocurrió un error durante el inicio de sesión",
-            "noAccount": "¿No tiene una cuenta?",
-            "registerLink": "Regístrese aquí"
-        },
-        "register": {
-            "title": "Registrarse",
-            "username": "Nombre de usuario:",
-            "email": "Correo electrónico:",
-            "password": "Contraseña:",
-            "confirmPassword": "Confirmar Contraseña:",
-            "submit": "Registrarse",
-            "usernamePlaceholder": "Ingrese su nombre de usuario",
-            "emailPlaceholder": "Ingrese su correo electrónico",
-            "passwordPlaceholder": "Ingrese su contraseña",
-            "confirmPasswordPlaceholder": "Confirme su contraseña",
-            "error": "Ocurrió un error durante el registro",
-            "passwordMismatch": "Las contraseñas no coinciden",
-            "haveAccount": "¿Ya tiene una cuenta?",
-            "loginLink": "Inicie sesión aquí"
-        }
+    "home": {
+        "title": "Bienvenido a Language Tutor",
+        "description": "Mejora tus habilidades lingüísticas con nuestro tutor impulsado por IA. Practica conversaciones, aprende gramática y mejora tu vocabulario de manera natural.",
+        "getStarted": "Comenzar"
     },
     "chat": {
-        "title": "Chat del Tutor de Idiomas",
-        "messagePlaceholder": "Escriba su mensaje...",
-        "startRecording": "Comenzar Grabación",
-        "stopRecording": "Detener Grabación",
+        "loginRequired": "Por favor, inicia sesión para acceder al chat",
+        "login": "Iniciar sesión",
+        "placeholder": "Escribe tu mensaje...",
         "send": "Enviar",
-        "playAudio": "Reproducir Audio",
-        "pauseAudio": "Pausar Audio",
-        "errors": {
-            "microphoneAccess": "No se pudo acceder al micrófono",
-            "sendMessage": "Error al enviar el mensaje",
-            "sendAudio": "Error al enviar el audio"
-        },
-        "notifications": {
-            "thinking": "El tutor está pensando...",
-            "recording": "Grabando...",
-            "processing": "Procesando audio..."
-        }
+        "newChat": "Nuevo chat",
+        "recordAudio": "Grabar audio",
+        "stopRecording": "Detener grabación",
+        "recordVideo": "Grabar video",
+        "takePicture": "Tomar foto",
+        "sayItAgain": "Repetir",
+        "stopSpeaking": "Detener voz",
+        "uploadText": "Archivo de texto",
+        "uploadPdf": "Archivo PDF",
+        "uploadVideo": "Archivo de video"
     },
-    "home": {
-        "title": "Bienvenido al Tutor de Idiomas",
-        "description": "Mejora tus habilidades lingüísticas con nuestro tutor impulsado por IA. Practica conversaciones, aprende gramática y mejora tu vocabulario de forma natural.",
-        "getStarted": "Comenzar",
-        "continueChat": "Continuar Aprendiendo"
-    },
-    "common": {
-        "loading": "Cargando...",
-        "error": "Ocurrió un error",
-        "retry": "Reintentar",
-        "cancel": "Cancelar",
-        "save": "Guardar",
-        "delete": "Eliminar",
-        "edit": "Editar"
+    "agents": {
+        "saveAgent": "Guardar agente",
+        "createAgent": "Crear agente",
+        "deleteAgent": "Eliminar agente",
+        "loading": "Cargando agentes...",
+        "noAgents": "No se encontraron agentes. Crea un nuevo agente para comenzar.",
+        "name": "Nombre del agente",
+        "systemPrompt": "Prompt del sistema",
+        "provider": "Proveedor",
+        "model": "Modelo",
+        "voice": "Voz",
+        "temperature": "Temperatura",
+        "maxTokens": "Máx. tokens",
+        "topP": "Top P",
+        "frequencyPenalty": "Penalización de frecuencia",
+        "presencePenalty": "Penalización de presencia",
+        "role": "Rol",
+        "connections": "Conexiones",
+        "tools": "Herramientas"
     }
 }

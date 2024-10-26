@@ -1,12 +1,14 @@
 import logging
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 import jwt
-import aiosqlite
+from sqlalchemy import select, insert, update
+from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import SECRET_KEY, ALGORITHM
 from ..database import get_db
 from ..auth import verify_auth_session
+from ..models import Agent, ActiveAgent
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -43,16 +45,18 @@ class AgentUpdate(BaseModel):
     connections: Optional[str] = None
     tools: Optional[str] = None
 
-async def get_active_agent(db, user_id):
+async def get_active_agent(db: AsyncSession, user_id: int):
     try:
-        async with db.execute("""
-            SELECT agents.* FROM agents
-            JOIN active_agent ON agents.id = active_agent.agent_id
-            WHERE active_agent.user_id = ?
-        """, (user_id,)) as cursor:
-            agent = await cursor.fetchone()
+        stmt = (
+            select(Agent)
+            .join(ActiveAgent)
+            .where(ActiveAgent.user_id == user_id)
+        )
+        result = await db.execute(stmt)
+        agent = result.scalar_one_or_none()
+        
         if agent:
-            logger.info(f"Retrieved active agent for user {user_id}: {agent[1]}, Voice: {agent[5]}")
+            logger.info(f"Retrieved active agent for user {user_id}: {agent.name}, Voice: {agent.voice}")
         else:
             logger.warning(f"No active agent found for user {user_id}")
         return agent
@@ -60,16 +64,31 @@ async def get_active_agent(db, user_id):
         logger.error(f"Error getting active agent for user {user_id}: {e}", exc_info=True)
         return None
 
-async def set_active_agent(db, user_id, agent_id):
+async def set_active_agent(db: AsyncSession, user_id: int, agent_id: int):
     try:
-        await db.execute("INSERT OR REPLACE INTO active_agent (user_id, agent_id) VALUES (?, ?)", (user_id, agent_id))
+        stmt = (
+            update(ActiveAgent)
+            .where(ActiveAgent.user_id == user_id)
+            .values(agent_id=agent_id)
+        )
+        result = await db.execute(stmt)
+        if result.rowcount == 0:
+            # If no existing record was updated, insert a new one
+            stmt = insert(ActiveAgent).values(user_id=user_id, agent_id=agent_id)
+            await db.execute(stmt)
         await db.commit()
         logger.info(f"Set active agent {agent_id} for user {user_id}")
     except Exception as e:
+        await db.rollback()
         logger.error(f"Error setting active agent: {e}", exc_info=True)
+        raise
 
 @router.post("/api/agents/create/")
-async def create_agent_endpoint(request: Request, agent: AgentCreate, db = Depends(get_db)):
+async def create_agent_endpoint(
+    request: Request,
+    agent: AgentCreate,
+    db: AsyncSession = Depends(get_db)
+):
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication token")
@@ -84,33 +103,49 @@ async def create_agent_endpoint(request: Request, agent: AgentCreate, db = Depen
         if not user_id:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-        async with db as conn:
-            cur = await conn.cursor()
-            await cur.execute("SELECT id FROM agents WHERE name = ?", (agent.name,))
-            if await cur.fetchone():
-                raise HTTPException(status_code=400, detail="Agent with this name already exists")
+        # Check if agent with same name exists
+        stmt = select(Agent).where(Agent.name == agent.name)
+        result = await db.execute(stmt)
+        if result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Agent with this name already exists")
 
-            await cur.execute("""
-                INSERT INTO agents (name, system_prompt, provider, model, voice, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, role, connections, tools) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (agent.name, agent.system_prompt, agent.provider, agent.model, agent.voice, agent.temperature, agent.max_tokens, agent.top_p, agent.frequency_penalty, agent.presence_penalty, agent.role, agent.connections, agent.tools))
-            await conn.commit()
+        # Create new agent
+        new_agent = Agent(
+            name=agent.name,
+            system_prompt=agent.system_prompt,
+            provider=agent.provider,
+            model=agent.model,
+            voice=agent.voice,
+            temperature=agent.temperature,
+            max_tokens=agent.max_tokens,
+            top_p=agent.top_p,
+            frequency_penalty=agent.frequency_penalty,
+            presence_penalty=agent.presence_penalty,
+            role=agent.role,
+            connections=agent.connections,
+            tools=agent.tools
+        )
+        db.add(new_agent)
+        await db.commit()
+        await db.refresh(new_agent)
 
-            await cur.execute("SELECT last_insert_rowid()")
-            agent_id = (await cur.fetchone())[0]
-
-        await set_active_agent(db, user_id, agent_id)
+        # Set as active agent
+        await set_active_agent(db, user_id, new_agent.id)
         return {"message": "Agent created successfully"}
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     except Exception as e:
+        await db.rollback()
         logger.error(f"Error in create_agent_endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/api/agents/")
-async def get_agents_endpoint(request: Request, db = Depends(get_db)):
+async def get_agents_endpoint(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication token")
@@ -123,16 +158,29 @@ async def get_agents_endpoint(request: Request, db = Depends(get_db)):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("user_id")
 
-        async with db.execute("""
-            SELECT id, name, system_prompt, provider, model, voice, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, role, connections, tools 
-            FROM agents
-        """) as cursor:
-            agents = await cursor.fetchall()
+        stmt = select(Agent)
+        result = await db.execute(stmt)
+        agents = result.scalars().all()
         
-        columns = ['id', 'name', 'system_prompt', 'provider', 'model', 'voice', 'temperature', 'max_tokens', 'top_p', 'frequency_penalty', 'presence_penalty', 'role', 'connections', 'tools']
-        agent_list = [dict(zip(columns, agent)) for agent in agents]
-        
-        return agent_list
+        return [
+            {
+                "id": agent.id,
+                "name": agent.name,
+                "system_prompt": agent.system_prompt,
+                "provider": agent.provider,
+                "model": agent.model,
+                "voice": agent.voice,
+                "temperature": agent.temperature,
+                "max_tokens": agent.max_tokens,
+                "top_p": agent.top_p,
+                "frequency_penalty": agent.frequency_penalty,
+                "presence_penalty": agent.presence_penalty,
+                "role": agent.role,
+                "connections": agent.connections,
+                "tools": agent.tools
+            }
+            for agent in agents
+        ]
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.PyJWTError:
@@ -142,7 +190,11 @@ async def get_agents_endpoint(request: Request, db = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Failed to fetch agents")
 
 @router.post("/api/agents/activate/")
-async def activate_agent(request: Request, agent: AgentSelect, db = Depends(get_db)):
+async def activate_agent(
+    request: Request,
+    agent: AgentSelect,
+    db: AsyncSession = Depends(get_db)
+):
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authentication token")
@@ -154,14 +206,14 @@ async def activate_agent(request: Request, agent: AgentSelect, db = Depends(get_
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("user_id")
-        async with db as conn:
-            cur = await conn.cursor()
-            await cur.execute("SELECT id, voice FROM agents WHERE name = ?", (agent.agent_name,))
-            row = await cur.fetchone()
-        if row:
-            agent_id, voice = row
-            await set_active_agent(db, user_id, agent_id)
-            logger.info(f"Activated agent: {agent.agent_name}, Voice: {voice}")
+
+        stmt = select(Agent).where(Agent.name == agent.agent_name)
+        result = await db.execute(stmt)
+        db_agent = result.scalar_one_or_none()
+        
+        if db_agent:
+            await set_active_agent(db, user_id, db_agent.id)
+            logger.info(f"Activated agent: {agent.agent_name}, Voice: {db_agent.voice}")
             return {"message": "Agent activated successfully"}
         else:
             raise HTTPException(status_code=404, detail="Agent not found")

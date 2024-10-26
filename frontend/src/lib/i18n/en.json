@@ -1,65 +1,43 @@
 {
-    "auth": {
-        "login": {
-            "title": "Login",
-            "email": "Email:",
-            "password": "Password:",
-            "submit": "Login",
-            "emailPlaceholder": "Enter your email",
-            "passwordPlaceholder": "Enter your password",
-            "error": "An error occurred during login",
-            "noAccount": "Don't have an account?",
-            "registerLink": "Register here"
-        },
-        "register": {
-            "title": "Register",
-            "username": "Username:",
-            "email": "Email:",
-            "password": "Password:",
-            "confirmPassword": "Confirm Password:",
-            "submit": "Register",
-            "usernamePlaceholder": "Enter your username",
-            "emailPlaceholder": "Enter your email",
-            "passwordPlaceholder": "Enter your password",
-            "confirmPasswordPlaceholder": "Confirm your password",
-            "error": "An error occurred during registration",
-            "passwordMismatch": "Passwords do not match",
-            "haveAccount": "Already have an account?",
-            "loginLink": "Login here"
-        }
-    },
-    "chat": {
-        "title": "Language Tutor Chat",
-        "messagePlaceholder": "Type your message...",
-        "startRecording": "Start Recording",
-        "stopRecording": "Stop Recording",
-        "send": "Send",
-        "playAudio": "Play Audio",
-        "pauseAudio": "Pause Audio",
-        "errors": {
-            "microphoneAccess": "Could not access microphone",
-            "sendMessage": "Failed to send message",
-            "sendAudio": "Failed to send audio"
-        },
-        "notifications": {
-            "thinking": "Tutor is thinking...",
-            "recording": "Recording...",
-            "processing": "Processing audio..."
-        }
-    },
     "home": {
         "title": "Welcome to Language Tutor",
         "description": "Improve your language skills with our AI-powered tutor. Practice conversations, learn grammar, and enhance your vocabulary in a natural way.",
-        "getStarted": "Get Started",
-        "continueChat": "Continue Learning"
+        "getStarted": "Get Started"
     },
-    "common": {
-        "loading": "Loading...",
-        "error": "An error occurred",
-        "retry": "Retry",
-        "cancel": "Cancel",
-        "save": "Save",
-        "delete": "Delete",
-        "edit": "Edit"
+    "chat": {
+        "loginRequired": "Please log in to access the chat",
+        "login": "Log In",
+        "placeholder": "Type your message...",
+        "send": "Send",
+        "newChat": "New Chat",
+        "recordAudio": "Record Audio",
+        "stopRecording": "Stop Recording",
+        "recordVideo": "Record Video",
+        "takePicture": "Take Picture",
+        "sayItAgain": "Say it Again",
+        "stopSpeaking": "Stop Speaking",
+        "uploadText": "Text File",
+        "uploadPdf": "PDF File",
+        "uploadVideo": "Video File"
+    },
+    "agents": {
+        "saveAgent": "Save Agent",
+        "createAgent": "Create Agent",
+        "deleteAgent": "Delete Agent",
+        "loading": "Loading agents...",
+        "noAgents": "No agents found. Create a new agent to get started.",
+        "name": "Agent Name",
+        "systemPrompt": "System Prompt",
+        "provider": "Provider",
+        "model": "Model",
+        "voice": "Voice",
+        "temperature": "Temperature",
+        "maxTokens": "Max Tokens",
+        "topP": "Top P",
+        "frequencyPenalty": "Frequency Penalty",
+        "presencePenalty": "Presence Penalty",
+        "role": "Role",
+        "connections": "Connections",
+        "tools": "Tools"
     }
 }

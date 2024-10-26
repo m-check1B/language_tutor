@@ -10,7 +10,8 @@ from ..auth import (
     create_access_token,
     create_auth_session,
     end_auth_session,
-    register_user
+    register_user,
+    get_current_user
 )
 from ..config import ACCESS_TOKEN_EXPIRE_MINUTES, SESSION_COOKIE_NAME
 
@@ -35,13 +36,18 @@ class UserResponse(BaseModel):
 async def register(user_data: UserCreate, db = Depends(get_db)):
     """Register a new user"""
     try:
-        user = await register_user(
+        success, message, user = await register_user(
             db,
             username=user_data.username,
             email=user_data.email,
             password=user_data.password
         )
-        return UserResponse(username=user["username"], email=user["email"])
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+        return UserResponse(username=user.username, email=user.email)
     except HTTPException:
         raise
     except Exception as e:
@@ -68,13 +74,18 @@ async def login(
 
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = await create_access_token(
-        data={"user_id": user["id"]},
+    access_token = create_access_token(
+        data={"user_id": user.id},
         expires_delta=access_token_expires
     )
 
     # Create auth session
-    session_id = await create_auth_session(db, user["id"])
+    session_id = f"session_{user.id}_{access_token[-8:]}"
+    if not await create_auth_session(db, user.id, session_id):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create session"
+        )
     
     # Set session cookie
     response.set_cookie(
@@ -89,7 +100,7 @@ async def login(
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "username": user["username"]
+        "username": user.username
     }
 
 @router.post("/api/auth/logout")
@@ -100,7 +111,9 @@ async def logout(
 ):
     """Logout user and end session"""
     if session_id:
-        await end_auth_session(db, session_id)
+        success, message = await end_auth_session(db, session_id)
+        if not success:
+            logger.warning(f"Logout issue: {message}")
     
     # Clear session cookie
     response.delete_cookie(

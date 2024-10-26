@@ -634,4 +634,6 @@
 </div>
 
 <!-- Hidden video element for camera capture -->
-<video id="video" style="display: none;" playsinline></video>
+<video id="video" style="display: none;" playsinline>
+  <track kind="captions" src="" label="English" default>
+</video>
