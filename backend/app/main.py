@@ -12,7 +12,8 @@ from .config import (
     ENABLE_IMAGE,
     ENABLE_PDF,
     ENABLE_WEBSOCKET,
-    ENABLE_TTS
+    ENABLE_TTS,
+    CORS_ORIGINS
 )
 
 # Configure logging to console
@@ -25,10 +26,14 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Language Tutor API")
 
-# Configure CORS
+# Configure CORS with credentials support
 app.add_middleware(
     CORSMiddleware,
-    **CORS_SETTINGS
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Include routers
@@ -58,6 +63,9 @@ async def startup_event():
         logger.info("Enabled features: %s", 
             ", ".join(f"{k}: {v}" for k, v in features.items())
         )
+
+        # Log CORS settings
+        logger.info("CORS Origins: %s", CORS_ORIGINS)
     except Exception as e:
         logger.error(f"Failed to initialize application: {e}")
         raise
@@ -72,6 +80,22 @@ async def log_requests(request: Request, call_next):
         return response
     except Exception as e:
         logger.error(f"Request failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Handle authentication and token refresh"""
+    try:
+        response = await call_next(request)
+        
+        # Check if response indicates token expiration
+        if response.status_code == 401:
+            # Let the client handle token refresh
+            response.headers["X-Token-Expired"] = "true"
+        
+        return response
+    except Exception as e:
+        logger.error(f"Auth middleware error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/", tags=["Health"])

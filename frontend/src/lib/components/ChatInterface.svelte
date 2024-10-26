@@ -31,24 +31,48 @@
   let audioPlayer: HTMLAudioElement | null = null;
   let lastAudioUrl: string | null = null;
   let videoStream: MediaStream | null = null;
+  let reconnectInterval: NodeJS.Timeout;
 
-  onMount(() => {
+  onMount(async () => {
     if (chatWindow) {
       chatWindow.scrollTop = chatWindow.scrollHeight;
     }
-    setupWebSocket();
+
+    // Initial WebSocket setup
+    await setupWebSocket();
+
+    // Set up reconnection interval
+    reconnectInterval = setInterval(async () => {
+      const connection = get(wsConnection);
+      if (!connection.isConnected) {
+        try {
+          await auth.refreshToken();
+          await setupWebSocket();
+        } catch (error) {
+          console.error('Failed to reconnect:', error);
+        }
+      }
+    }, 5000); // Check every 5 seconds
   });
 
   onDestroy(() => {
     disconnectWebSocket();
+    if (reconnectInterval) {
+      clearInterval(reconnectInterval);
+    }
   });
 
-  function handleMessage() {
+  async function handleMessage() {
     const message = get(userMessage);
     const activeAgent = get(selectedAgent);
     if (message.trim() && activeAgent && activeAgent.name) {
-      sendWebSocketMessage(message);
-      userMessage.set('');
+      try {
+        await sendWebSocketMessage(message);
+        userMessage.set('');
+      } catch (error) {
+        console.error('Error sending message:', error);
+        responseError.set('Failed to send message. Please try again.');
+      }
     }
   }
 
@@ -74,16 +98,25 @@
       formData.append('audio', audioFile);
       formData.append('agent_name', get(selectedAgent).name);
 
+      const authState = get(auth);
       const response = await fetch('/api/multimedia/deepgram_transcribe/', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Authorization': `Bearer ${authState.token}`
+        },
+        body: formData,
+        credentials: 'include'
       });
+
+      if (!response.ok) {
+        throw new Error('Transcription failed');
+      }
 
       const data = await response.json();
       const transcription = data.transcription;
 
       if (transcription) {
-        sendWebSocketMessage(transcription);
+        await sendWebSocketMessage(transcription);
       }
     } catch (error) {
       handleError(error, transcriptionError);
@@ -240,8 +273,13 @@
 
   async function resetChatSession() {
     try {
+      const authState = get(auth);
       const response = await fetch('/api/multimedia/reset-chat-session/', {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authState.token}`
+        },
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -251,7 +289,7 @@
         const activeAgent = get(selectedAgent);
         if (activeAgent && activeAgent.name) {
           const message = "Starting a new session.";
-          sendWebSocketMessage(message);
+          await sendWebSocketMessage(message);
         }
       } else {
         throw new Error('Failed to reset chat session');
@@ -381,9 +419,14 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const authState = get(auth);
       const response = await fetch('/api/multimedia/upload-image', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Authorization': `Bearer ${authState.token}`
+        },
+        body: formData,
+        credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to upload image');
     } catch (error) {
@@ -395,9 +438,14 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const authState = get(auth);
       const response = await fetch('/api/multimedia/upload-text', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Authorization': `Bearer ${authState.token}`
+        },
+        body: formData,
+        credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to upload text file');
     } catch (error) {
@@ -409,9 +457,14 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const authState = get(auth);
       const response = await fetch('/api/multimedia/upload-pdf', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Authorization': `Bearer ${authState.token}`
+        },
+        body: formData,
+        credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to upload PDF');
     } catch (error) {
@@ -423,9 +476,14 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const authState = get(auth);
       const response = await fetch('/api/multimedia/upload-video', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Authorization': `Bearer ${authState.token}`
+        },
+        body: formData,
+        credentials: 'include'
       });
       if (!response.ok) throw new Error('Failed to upload video');
     } catch (error) {

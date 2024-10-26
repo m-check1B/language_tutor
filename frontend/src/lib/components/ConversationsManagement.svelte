@@ -23,12 +23,16 @@
       const authState = get(auth);
       const response = await fetch(`${API_URL}/chat/conversations`, {
         headers: {
-          'Authorization': `Bearer ${authState.token}`
+          'Authorization': `Bearer ${authState.token}`,
+          'Content-Type': 'application/json'
         },
-        credentials: 'include'  // Add this line to include cookies
+        credentials: 'include'
       });
       if (response.ok) {
         conversations = await response.json();
+      } else {
+        const error = await response.json();
+        console.error('Failed to load conversations:', error);
       }
     } catch (error) {
       console.error('Failed to load conversations:', error);
@@ -48,9 +52,10 @@
       const response = await fetch(`${API_URL}/chat/conversations/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${authState.token}`
+          'Authorization': `Bearer ${authState.token}`,
+          'Content-Type': 'application/json'
         },
-        credentials: 'include'  // Add this line to include cookies
+        credentials: 'include'
       });
       if (response.ok) {
         conversations = conversations.filter(c => c.id !== id);
@@ -58,6 +63,9 @@
           selectedConversation = null;
           chatHistory.set([]);
         }
+      } else {
+        const error = await response.json();
+        console.error('Failed to delete conversation:', error);
       }
     } catch (error) {
       console.error('Failed to delete conversation:', error);

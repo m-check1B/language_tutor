@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import jwt
 from sqlalchemy import select, insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..config import SECRET_KEY, ALGORITHM
+from ..config import SECRET_KEY, ALGORITHM, DEFAULT_SYSTEM_PROMPT
 from ..database import get_db
 from ..auth import verify_auth_session
 from ..models import Agent, ActiveAgent
@@ -58,7 +58,29 @@ async def get_active_agent(db: AsyncSession, user_id: int):
         if agent:
             logger.info(f"Retrieved active agent for user {user_id}: {agent.name}, Voice: {agent.voice}")
         else:
-            logger.warning(f"No active agent found for user {user_id}")
+            # Create and set default agent if none exists
+            default_agent = Agent(
+                name="Language Tutor",
+                system_prompt=DEFAULT_SYSTEM_PROMPT,
+                provider="openai",
+                model="gpt-4-turbo-preview",
+                voice="alloy",
+                temperature=0.7,
+                max_tokens=1000,
+                top_p=1.0,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
+                role="tutor"
+            )
+            db.add(default_agent)
+            await db.commit()
+            await db.refresh(default_agent)
+            
+            # Set as active agent
+            await set_active_agent(db, user_id, default_agent.id)
+            logger.info(f"Created and activated default agent for user {user_id}")
+            return default_agent
+
         return agent
     except Exception as e:
         logger.error(f"Error getting active agent for user {user_id}: {e}", exc_info=True)

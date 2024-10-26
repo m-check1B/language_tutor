@@ -1,135 +1,163 @@
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from ..auth import verify_auth_session
+from ..models import User
+from ..ws import ConnectionManager
+from ..database import get_db
 import logging
 import json
-from typing import List, Dict
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 import jwt
+from typing import Optional
 from ..config import SECRET_KEY, ALGORITHM
-from ..database import get_db
-from ..auth import verify_auth_session
 
+router = APIRouter()
+manager = ConnectionManager()
 logger = logging.getLogger(__name__)
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
-
-    async def connect(self, websocket: WebSocket, user_id: str):
-        await websocket.accept()
-        if user_id not in self.active_connections:
-            self.active_connections[user_id] = []
-        self.active_connections[user_id].append(websocket)
-        logger.info(f"User {user_id} connected. Total connections: {len(self.active_connections[user_id])}")
-
-    def disconnect(self, websocket: WebSocket, user_id: str):
-        if user_id in self.active_connections:
-            self.active_connections[user_id].remove(websocket)
-            if not self.active_connections[user_id]:
-                del self.active_connections[user_id]
-            logger.info(f"User {user_id} disconnected. Total connections: {len(self.active_connections.get(user_id, []))}")
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        try:
-            await websocket.send_text(message)
-        except Exception as e:
-            logger.error(f"Error sending personal message: {e}")
-
-    async def broadcast(self, message: dict, user_id: str):
-        if user_id in self.active_connections:
-            disconnected = []
-            for connection in self.active_connections[user_id]:
-                try:
-                    await connection.send_text(json.dumps(message))
-                except Exception as e:
-                    logger.error(f"Error broadcasting to user {user_id}: {e}")
-                    disconnected.append(connection)
-            
-            # Clean up disconnected connections
-            for connection in disconnected:
-                self.active_connections[user_id].remove(connection)
-            if not self.active_connections[user_id]:
-                del self.active_connections[user_id]
-        else:
-            logger.error(f"No active WebSocket connection found for user {user_id}")
-
-manager = ConnectionManager()
-router = APIRouter(prefix="/api")  # Add prefix here
-
-@router.websocket("/ws/{token}")
-async def websocket_endpoint(websocket: WebSocket, token: str, db = Depends(get_db)):
+async def get_user_from_token(token: str, db: AsyncSession) -> Optional[User]:
+    """Get user from JWT token"""
     try:
-        # Verify token and get user_id
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("user_id")
-        if not user_id:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        if user_id is None:
+            return None
+            
+        stmt = select(User).where(User.id == user_id)
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+    except jwt.JWTError:
+        return None
+
+@router.websocket("/ws/{token}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """WebSocket endpoint for real-time communication"""
+    try:
+        # Get auth session ID from query params
+        auth_session_id = websocket.query_params.get("session")
+        if not auth_session_id:
+            await websocket.close(code=4001, reason="Missing auth session")
             return
 
-        # Connect and handle messages
-        await manager.connect(websocket, user_id)
+        # Verify auth session
+        if not await verify_auth_session(db, auth_session_id):
+            await websocket.close(code=4001, reason="Invalid or expired session")
+            return
+
+        # Get user from token
+        user = await get_user_from_token(token, db)
+        if not user:
+            await websocket.close(code=4001, reason="Invalid authentication token")
+            return
+
+        # Accept connection
+        await manager.connect(websocket, user.id)
+        
+        try:
+            while True:
+                # Receive message
+                data = await websocket.receive_text()
+                try:
+                    message_data = json.loads(data)
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON received: {data}")
+                    continue
+
+                # Process message based on type
+                message_type = message_data.get("type")
+                if message_type == "chat":
+                    # Handle chat message
+                    await manager.broadcast_message(
+                        user.id,
+                        message_data.get("content", ""),
+                        message_data.get("session_id")
+                    )
+                elif message_type == "heartbeat":
+                    # Respond to heartbeat
+                    await websocket.send_json({
+                        "type": "heartbeat",
+                        "status": "alive"
+                    })
+                else:
+                    logger.warning(f"Unknown message type: {message_type}")
+
+        except WebSocketDisconnect:
+            await manager.disconnect(websocket, user.id)
+            await manager.broadcast_user_disconnect(user.id)
+        except Exception as e:
+            logger.error(f"WebSocket error: {e}")
+            await manager.disconnect(websocket, user.id)
+            await websocket.close(code=1011, reason="Internal server error")
+
+    except Exception as e:
+        logger.error(f"WebSocket connection error: {e}")
+        await websocket.close(code=1011, reason="Internal server error")
+
+@router.websocket("/ws/admin/{token}")
+async def admin_websocket_endpoint(
+    websocket: WebSocket,
+    token: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin WebSocket endpoint for monitoring and management"""
+    try:
+        # Get auth session ID from query params
+        auth_session_id = websocket.query_params.get("session")
+        if not auth_session_id:
+            await websocket.close(code=4001, reason="Missing auth session")
+            return
+
+        # Verify auth session
+        if not await verify_auth_session(db, auth_session_id):
+            await websocket.close(code=4001, reason="Invalid or expired session")
+            return
+
+        # Get user from token
+        user = await get_user_from_token(token, db)
+        if not user or not user.is_admin:
+            await websocket.close(code=4003, reason="Admin access required")
+            return
+
+        await manager.connect_admin(websocket, user.id)
         try:
             while True:
                 data = await websocket.receive_text()
                 try:
-                    message_data = json.loads(data)
-                    message_type = message_data.get("type")
-                    content = message_data.get("content")
-
-                    if message_type == "ping":
-                        await manager.send_personal_message(json.dumps({"type": "pong"}), websocket)
-                    else:
-                        # Handle other message types as needed
-                        await manager.broadcast(
-                            {
-                                "type": "message",
-                                "content": content,
-                                "user_id": user_id
-                            },
-                            user_id
+                    admin_data = json.loads(data)
+                    # Process admin commands
+                    command = admin_data.get("command")
+                    if command == "get_stats":
+                        stats = manager.get_connection_stats()
+                        await websocket.send_json({
+                            "type": "stats",
+                            "data": stats
+                        })
+                    elif command == "broadcast":
+                        await manager.broadcast_system_message(
+                            admin_data.get("message", "")
                         )
+                    else:
+                        logger.warning(f"Unknown admin command: {command}")
                 except json.JSONDecodeError:
-                    logger.error(f"Invalid JSON received from user {user_id}")
-                    continue
-
+                    logger.error(f"Invalid JSON in admin message: {data}")
         except WebSocketDisconnect:
-            manager.disconnect(websocket, user_id)
-            await manager.broadcast(
-                {
-                    "type": "system",
-                    "content": "Client disconnected",
-                    "user_id": user_id
-                },
-                user_id
-            )
-    except jwt.ExpiredSignatureError:
-        logger.error("Token expired")
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-    except jwt.PyJWTError as e:
-        logger.error(f"JWT error: {e}")
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await manager.disconnect_admin(websocket, user.id)
+        except Exception as e:
+            logger.error(f"Admin WebSocket error: {e}")
+            await manager.disconnect_admin(websocket, user.id)
+            await websocket.close(code=1011, reason="Internal server error")
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        logger.error(f"Admin WebSocket connection error: {e}")
+        await websocket.close(code=1011, reason="Internal server error")
 
-async def broadcast_chat_history(user_id: str, chat_history: List[Dict]):
-    """
-    Broadcast chat history to all connections for a user
-    """
-    message = {
-        "type": "history_update",
-        "history": chat_history
+@router.get("/ws/status")
+async def get_websocket_status():
+    """Get current WebSocket connection status"""
+    return {
+        "active_connections": manager.get_connection_stats(),
+        "status": "operational"
     }
-    await manager.broadcast(message, user_id)
-
-async def send_message(user_id: str, content: str, is_error: bool = False):
-    """
-    Send a message to all connections for a user
-    """
-    if not content:
-        logger.error(f"Attempted to send an empty message to user {user_id}")
-        return
-
-    message = {
-        "type": "error" if is_error else "message",
-        "content": content
-    }
-    await manager.broadcast(message, user_id)

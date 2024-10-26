@@ -23,7 +23,7 @@ function createAuthStore() {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        username: email, // Using email as username
+                        username: email,
                         email: email,
                         password: password
                     }),
@@ -44,7 +44,7 @@ function createAuthStore() {
         login: async (email: string, password: string) => {
             try {
                 const formData = new URLSearchParams();
-                formData.append('username', email); // Backend expects username field
+                formData.append('username', email);
                 formData.append('password', password);
 
                 const response = await fetch(`${API_URL}/auth/login`, {
@@ -53,7 +53,7 @@ function createAuthStore() {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
                     body: formData,
-                    credentials: 'include', // Include cookies
+                    credentials: 'include',
                 });
 
                 if (!response.ok) {
@@ -72,14 +72,36 @@ function createAuthStore() {
             try {
                 await fetch(`${API_URL}/auth/logout`, {
                     method: 'POST',
-                    credentials: 'include', // Include cookies
+                    credentials: 'include',
                 });
                 set({ token: null, isLoggedIn: false });
             } catch (error) {
                 console.error('Logout failed:', error);
-                // Still clear the local state even if the API call fails
                 set({ token: null, isLoggedIn: false });
             }
+        },
+        refreshToken: async () => {
+            try {
+                const response = await fetch(`${API_URL}/auth/refresh`, {
+                    method: 'POST',
+                    credentials: 'include',
+                });
+
+                if (!response.ok) {
+                    throw new Error('Token refresh failed');
+                }
+
+                const data = await response.json();
+                set({ token: data.access_token, isLoggedIn: true });
+                return data.access_token;
+            } catch (error) {
+                console.error('Token refresh failed:', error);
+                set({ token: null, isLoggedIn: false });
+                throw error;
+            }
+        },
+        setToken: (token: string) => {
+            set({ token, isLoggedIn: true });
         }
     };
 }
