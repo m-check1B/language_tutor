@@ -1,2 +1,4 @@
-export { auth } from './auth';
-export { chatStore } from './chat';
+// Re-export all stores
+export * from './auth';
+export * from './stores';
+export * from './theme';

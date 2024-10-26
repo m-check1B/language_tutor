@@ -41,19 +41,15 @@
         agent_name: agentName
       };
 
-      const response = await fetch('/api/multimedia/text/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+      const response = await apiPost(`/api/multimedia/text/`, payload, {
+        params: {
+          include_response: true
+        }
       });
 
-      const data = await response.json();
-
-      if (data.response_text) {
+      if (response.data.response_text) {
         chatHistory.update(history => {
-          const newHistory = [...history, { text: message, isUser: true }, { text: data.response_text, isUser: false }];
+          const newHistory = [...history, { text: message, isUser: true }, { text: response.data.response_text, isUser: false }];
           sessionStorage.setItem('lastConversation', JSON.stringify(newHistory));
           return newHistory;
         });
@@ -77,7 +73,9 @@
   }
 
   async function handleTranscriptionAndSend() {
-    if (isProcessing) return;
+    if (isProcessing) {
+      return;
+    }
 
     isProcessing = true;
     isLoading.set(true);
@@ -89,42 +87,45 @@
 
       if (audioChunks.length === 0) {
         transcriptionError.set('No audio recorded.');
+        isProcessing = false;
+        isLoading.set(false);
         return;
       }
 
       const formData = new FormData();
       const blob = new Blob(audioChunks, { type: 'audio/webm' });
       const audioFile = new File([blob], "audio.webm", { type: 'audio/webm' });
+
       formData.append('audio', audioFile);
       formData.append('agent_name', get(selectedAgent).name);
 
-      const response = await fetch('/api/multimedia/deepgram_transcribe/', {
-        method: 'POST',
-        body: formData
-      });
+      const transcriptionResponse = await apiPost(`/api/multimedia/deepgram_transcribe/`, formData);
 
-      const data = await response.json();
-      const transcription = data.transcription;
+      const transcription = transcriptionResponse.data.transcription;
 
       if (transcription) {
-        const llmResponse = await fetch('/api/multimedia/text/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            prompt_text: transcription,
-            agent_name: get(selectedAgent).name
-          })
+        const llmResponse = await apiPost(`/api/multimedia/text/`, {
+          prompt_text: transcription,
+          agent_name: get(selectedAgent).name
+        }, {
+          params: {
+            include_response: true 
+          }
         });
 
-        const llmData = await llmResponse.json();
-        if (llmData.response_text) {
-          await synthesizeSpeech(llmData.response_text);
+        if (llmResponse.data && llmResponse.data.response_text) {
+          const responseText = llmResponse.data.response_text;
+          await synthesizeSpeech(responseText);
+        } else if (llmResponse.data.message === "Request received and queued for processing") {
+          console.log('LLM response queued, waiting for actual response.');
+        } else {
+          transcriptionError.set('Unexpected response from API');
         }
+      } else {
+        throw new Error("Received null transcription from API");
       }
     } catch (error) {
-      handleError(error, transcriptionError);
+      transcriptionError.set((error as Error).message);
     } finally {
       isLoading.set(false);
       isAudioRecording.set(false);
@@ -148,6 +149,8 @@
       } else {
         if (audioRecorder.state === 'inactive') {
           startAudioRecording();
+        } else {
+          console.warn('Audio recorder is already recording');
         }
       }
     }
@@ -159,7 +162,7 @@
       return;
     }
     if (audioRecorder.state === 'inactive') {
-      audioChunks = [];
+      audioChunks = []; 
       audioRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunks.push(event.data);
@@ -167,6 +170,8 @@
       };
       audioRecorder.start();
       isAudioRecording.set(true);
+    } else {
+      console.warn('Audio recorder is already recording');
     }
   }
 
@@ -263,7 +268,7 @@
     if (type === 'text') input.accept = '.txt';
     if (type === 'pdf') input.accept = 'application/pdf';
     if (type === 'image') input.accept = 'image/png, image/jpeg';
-    if (type === 'video') input.accept = 'video/mp4, video/webm';
+    if (type === 'video') input.accept = 'video/mp4, video/x-flv, video/mov, video/mpeg, video/mpegps, video/webm, video/wmv, video/3gpp';
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -278,13 +283,11 @@
 
   async function resetChatSession() {
     try {
-      const response = await fetch('/api/multimedia/reset-chat-session/', {
-        method: 'POST'
-      });
+      const response = await apiPost(`/api/multimedia/reset-chat-session/`);
 
-      if (response.ok) {
-        chatHistory.set([]);
-        sessionStorage.removeItem('lastConversation');
+      if (response.status === 200) {
+        chatHistory.set([]); 
+        sessionStorage.removeItem('lastConversation'); 
 
         const activeAgent = get(selectedAgent);
         if (activeAgent && activeAgent.name) {
@@ -314,6 +317,8 @@
       } else {
         if (videoRecorder.state === 'inactive') {
           startVideoRecording();
+        } else {
+          console.warn('Video recorder is already recording');
         }
       }
     }
@@ -333,6 +338,8 @@
       };
       videoRecorder.start();
       isVideoRecording.set(true);
+    } else {
+      console.warn('Video recorder is already recording');
     }
   }
 
@@ -378,7 +385,10 @@
         }
       };
 
-      audioRecorder = recorder;
+      recorder.onstop = () => {
+        console.log('MediaRecorder stopped, data available:', audioChunks);
+      };
+
       return recorder;
     } catch (error) {
       console.error('Error setting up audio recorder:', error);
@@ -390,16 +400,22 @@
   async function setupVideoRecorder(): Promise<MediaRecorder | undefined> {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = (e) => {
+      console.log('Video recorder setup successful');
+      const videoRecorder = new MediaRecorder(stream);
+      videoRecorder.ondataavailable = (e) => {
         if (get(isVideoRecording)) videoChunks.push(e.data);
       };
-      recorder.onstop = async () => {
+      videoRecorder.onstop = async () => {
+        console.log('Video recorder stopped');
         try {
           if (get(isVideoRecording)) {
+            console.log('Preparing to send video');
             const videoBlob = new Blob(videoChunks, { type: 'video/mp4' });
             const selectedVideoFile = new File([videoBlob], "video.mp4", { type: 'video/mp4' });
             await handleVideoUpload(selectedVideoFile);
+            console.log('Video upload completed');
+          } else {
+            console.log('Recording state (video) was false, not sending video');
           }
         } catch (error) {
           handleError(error, transcriptionError);
@@ -408,8 +424,7 @@
           isLoading.set(false);
         }
       };
-      videoRecorder = recorder;
-      return recorder;
+      return videoRecorder;
     } catch (error) {
       handleError(error, transcriptionError);
     }
@@ -419,11 +434,12 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch('/api/multimedia/upload-image', {
-        method: 'POST',
-        body: formData
+      const response = await apiPost(`/api/multimedia/upload-image`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
-      if (!response.ok) throw new Error('Failed to upload image');
+      console.log('Image uploaded successfully:', response.data);
     } catch (error) {
       handleError(error, responseError);
     }
@@ -433,11 +449,12 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch('/api/multimedia/upload-text', {
-        method: 'POST',
-        body: formData
+      const response = await apiPost(`/api/multimedia/upload-text`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
-      if (!response.ok) throw new Error('Failed to upload text file');
+      console.log('Text file uploaded successfully:', response.data);
     } catch (error) {
       handleError(error, responseError);
     }
@@ -447,11 +464,12 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch('/api/multimedia/upload-pdf', {
-        method: 'POST',
-        body: formData
+      const response = await apiPost(`/api/multimedia/upload-pdf`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
-      if (!response.ok) throw new Error('Failed to upload PDF');
+      console.log('PDF uploaded successfully:', response.data);
     } catch (error) {
       handleError(error, responseError);
     }
@@ -461,11 +479,12 @@
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch('/api/multimedia/upload-video', {
-        method: 'POST',
-        body: formData
+      const response = await apiPost(`/api/multimedia/upload-video`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
-      if (!response.ok) throw new Error('Failed to upload video');
+      console.log('Video uploaded successfully:', response.data);
     } catch (error) {
       handleError(error, responseError);
     }
@@ -473,22 +492,15 @@
 
   async function synthesizeSpeech(text: string) {
     try {
-      const response = await fetch('/api/multimedia/synthesize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          text: text,
-          voice: get(selectedVoice),
-          speed: get(speechSpeed)
-        })
+      const response = await apiPost(`/api/multimedia/synthesize`, {
+        text: text,
+        voice: get(selectedVoice),
+        speed: get(speechSpeed)
       });
-
-      const data = await response.json();
-      if (data.audio_url) {
-        lastAudioUrl = data.audio_url;
-        const audio = new Audio(data.audio_url);
+      if (response.data.audio_url) {
+        const audioUrl = response.data.audio_url;
+        lastAudioUrl = audioUrl;
+        const audio = new Audio(audioUrl);
         audio.onerror = (event) => {
           if ((event.target as HTMLAudioElement).error?.code === 4) {
             responseError.set('Audio file not found.');
@@ -517,121 +529,138 @@
     console.error(error);
     store.set(error.message);
   }
+
+  async function apiPost(url: string, data: any, config: RequestInit = {}): Promise<any> {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: {
+        'Content-Type': 'application/json',
+        ...config.headers,
+      },
+    });
+    return response.json();
+  }
 </script>
 
-<div class="flex flex-col h-[800px] bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl shadow-xl overflow-hidden">
-  <!-- Chat Window -->
-  <div class="flex-1 overflow-y-auto p-6" bind:this={chatWindow}>
+<div class="chat-section">
+  <div class="chat-window" bind:this={chatWindow}>
     {#each $chatHistory as message}
-      <div class="mb-4 {message.isUser ? 'flex justify-end' : 'flex justify-start'}">
-        <div class="{message.isUser ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'} rounded-lg px-4 py-2 max-w-[80%] shadow-md">
-          {message.text}
-        </div>
-      </div>
+      <p class={message.isUser ? 'user' : 'assistant'}>{message.text}</p>
     {/each}
   </div>
-
-  <!-- Input Area -->
-  <div class="border-t dark:border-gray-700 p-4 bg-white/50 dark:bg-gray-800/50">
-    <!-- Text Input -->
-    <div class="flex gap-2 mb-4">
-      <input
-        type="text"
-        bind:value={$userMessage}
-        placeholder="Type your message..."
-        class="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        on:keypress={(e) => e.key === 'Enter' && handleMessage()}
-      />
-      <button
-        on:click={handleMessage}
-        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-      >
-        Send
-      </button>
-    </div>
-
-    <!-- Media Controls -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-      <button
-        on:click={toggleAudioRecording}
-        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors flex items-center justify-center gap-2"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clip-rule="evenodd" />
-        </svg>
-        {$isAudioRecording ? 'Stop Recording' : 'Record Audio'}
-      </button>
-
-      <button
-        on:click={toggleVideoRecording}
-        class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors flex items-center justify-center gap-2"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
-        </svg>
-        {$isVideoRecording ? 'Stop Recording' : 'Record Video'}
-      </button>
-
-      <button
-        on:click={takePicture}
-        class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors flex items-center justify-center gap-2"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
-        </svg>
-        Take Picture
-      </button>
-
-      <button
-        on:click={resetChatSession}
-        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors flex items-center justify-center gap-2"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
-        </svg>
-        New Chat
-      </button>
-    </div>
-
-    <!-- Audio Controls -->
-    <div class="grid grid-cols-2 gap-2 mb-4">
-      <button
-        on:click={sayItAgain}
-        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-      >
-        Say it Again
-      </button>
-      <button
-        on:click={stopSpeaking}
-        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-      >
-        Stop Speaking
-      </button>
-    </div>
-
-    <!-- File Upload Options -->
-    <div class="grid grid-cols-3 gap-2">
-      <button
-        on:click={() => selectFile('text')}
-        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-      >
-        Text File
-      </button>
-      <button
-        on:click={() => selectFile('pdf')}
-        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-      >
-        PDF File
-      </button>
-      <button
-        on:click={() => selectFile('video')}
-        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-      >
-        Video File
-      </button>
-    </div>
+  <div class="message-input">
+    <input type="text" bind:value={$userMessage} placeholder="Type your message here..." />
+    <button on:click={handleMessage} class:flash={$flashingButtons.has('send-message-button')}>
+      Text Message
+    </button>
+  </div>
+  <div class="media-buttons">
+    <button on:click={toggleAudioRecording} class:flash={$flashingButtons.has('toggle-audio-recording-button')}>
+      {$isAudioRecording ? 'Stop Recording' : 'Audio Message'}
+    </button>
+    <button on:click={handleTranscriptionAndSend} class:flash={$flashingButtons.has('transcribe-and-send-button')}>
+      Transcribe and Send
+    </button>
+    <button on:click={sayItAgain} class:flash={$flashingButtons.has('say-again-button')}>
+      Say it Again
+    </button>
+    <button on:click={stopSpeaking} class:flash={$flashingButtons.has('stop-speaking-button')}>
+      Stop Speaking
+    </button>
+    <button on:click={takePicture} class:flash={$flashingButtons.has('take-picture-button')}>
+      Take a Picture
+    </button>
+    <button on:click={toggleVideoRecording} class:flash={$flashingButtons.has('toggle-video-recording-button')}>
+      {$isVideoRecording ? 'Stop Recording' : 'Video Message'}
+    </button>
+    <button on:click={() => selectFile('text')} class:flash={$flashingButtons.has('select-text-file-button')}>
+      Send Text File
+    </button>
+    <button on:click={() => selectFile('image')} class:flash={$flashingButtons.has('select-image-file-button')}>
+      Send Image File
+    </button>
+    <button on:click={() => selectFile('audio')} class:flash={$flashingButtons.has('select-audio-file-button')}>
+      Send Audio File
+    </button>
+    <button on:click={() => selectFile('video')} class:flash={$flashingButtons.has('select-video-file-button')}>
+      Send Video File
+    </button>
+    <button on:click={() => selectFile('pdf')} class:flash={$flashingButtons.has('select-pdf-file-button')}>
+      Send PDF File
+    </button>
+    <button on:click={resetChatSession} class:flash={$flashingButtons.has('reset-session-button')}>
+      New Chat
+    </button>
   </div>
 </div>
 
-<!-- Hidden video element for camera capture -->
-<video id="video" style="display: none;" playsinline></video>
+<style>
+  .chat-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .chat-window {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 10px;
+    background: #D0E8D8;
+    border-radius: 5px;
+    border: 2px solid #556B2F;
+    height: 400px; /* Adjust as needed */
+  }
+  
+  .message-input {
+    display: flex;
+    gap: 10px;
+  }
+  
+  .message-input input {
+    flex-grow: 1;
+    padding: 10px;
+    border-radius: 5px;
+    border: 2px solid #556B2F;
+    background: #C2D2C0;
+  }
+  
+  .message-input button {
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    background-color: #50C878;
+    color: #FFFFF0;
+  }
+  
+  .media-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  
+  .media-buttons button {
+    flex-grow: 1;
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    background-color: #50C878;
+    color: #FFFFF0;
+    text-align: center;
+  }
+  
+  .flash {
+    animation: flash 0.5s ease-in-out;
+  }
+  
+  @keyframes flash {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+</style>

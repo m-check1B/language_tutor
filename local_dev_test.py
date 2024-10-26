@@ -1,76 +1,44 @@
-import os
-import requests
-import websocket
-import json
-from dotenv import load_dotenv
+import psycopg2
+from time import sleep
 
-# Load environment variables
-load_dotenv()
-
-FRONTEND_URL = "http://localhost:5175"
-BACKEND_URL = "http://localhost:8000"
-API_BASE_URL = f"{BACKEND_URL}/api"
-WS_URL = "ws://localhost:8000/ws"
-
-def test_frontend():
-    try:
-        response = requests.get(FRONTEND_URL)
-        assert response.status_code == 200, "Frontend connection failed"
-        print("Frontend connection successful")
-    except requests.ConnectionError:
-        print("Frontend connection failed. Make sure the frontend server is running on port 5175.")
-
-def test_api_endpoints():
-    try:
-        # Test registration
-        register_data = {
-            "username": "testuser",
-            "email": "testuser@example.com",
-            "password": "testpassword"
-        }
-        response = requests.post(f"{API_BASE_URL}/auth/register", json=register_data)
-        assert response.status_code == 200, "Registration failed"
-        print("Registration successful")
-
-        # Test login
-        login_data = {
-            "username": "testuser",
-            "password": "testpassword"
-        }
-        response = requests.post(f"{API_BASE_URL}/auth/token", data=login_data)
-        assert response.status_code == 200, "Login failed"
-        token = response.json()["access_token"]
-        print("Login successful")
-
-        # Test creating a conversation
-        headers = {"Authorization": f"Bearer {token}"}
-        response = requests.post(f"{API_BASE_URL}/conversations", headers=headers)
-        assert response.status_code == 200, "Creating conversation failed"
-        conversation_id = response.json()["id"]
-        print("Creating conversation successful")
-
-        # Test sending a message
-        message_data = {"content": "Hello, AI!"}
-        response = requests.post(f"{API_BASE_URL}/conversations/{conversation_id}/messages", headers=headers, json=message_data)
-        assert response.status_code == 200, "Sending message failed"
-        print("Sending message successful")
-    except requests.ConnectionError:
-        print("Backend connection failed. Make sure the backend server is running on port 8000.")
-
-def test_websocket():
-    try:
-        ws = websocket.create_connection(WS_URL)
-        ws.send(json.dumps({"type": "test"}))
-        result = ws.recv()
-        assert result, "WebSocket connection failed"
-        print("WebSocket connection successful")
-        ws.close()
-    except Exception as e:
-        print(f"WebSocket connection failed: {str(e)}")
+def test_db_connection(max_attempts=5):
+    attempt = 0
+    while attempt < max_attempts:
+        try:
+            # Connect to the PostgreSQL database running in Docker
+            conn = psycopg2.connect(
+                dbname="language_tutor",
+                user="postgres",
+                password="postgres",
+                host="localhost",  # Using localhost since we're connecting from outside Docker
+                port="5432"
+            )
+            
+            # Create a cursor
+            cur = conn.cursor()
+            
+            # Execute a simple test query
+            cur.execute('SELECT version();')
+            
+            # Fetch the result
+            version = cur.fetchone()
+            print("Successfully connected to the database!")
+            print(f"PostgreSQL version: {version[0]}")
+            
+            # Close communication with the database
+            cur.close()
+            conn.close()
+            return True
+            
+        except psycopg2.OperationalError as e:
+            attempt += 1
+            if attempt == max_attempts:
+                print(f"Could not connect to the database after {max_attempts} attempts")
+                print(f"Error: {e}")
+                return False
+            print(f"Attempt {attempt} failed. Retrying in 2 seconds...")
+            sleep(2)
 
 if __name__ == "__main__":
-    print("Starting local development tests...")
-    test_frontend()
-    test_api_endpoints()
-    test_websocket()
-    print("Local development tests completed.")
+    print("Testing connection to Docker PostgreSQL database from local environment...")
+    test_db_connection()
