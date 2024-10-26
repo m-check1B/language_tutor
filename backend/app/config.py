@@ -37,10 +37,17 @@ HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
 
 # CORS settings
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+CORS_ORIGINS = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173"
 ).split(",")
+
+CORS_SETTINGS = {
+    "allow_origins": CORS_ORIGINS,
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
 
 # Feature flags
 ENABLE_AUDIO = os.getenv("ENABLE_AUDIO", "true").lower() == "true"
@@ -68,7 +75,7 @@ SESSION_COOKIE_NAME = os.getenv("SESSION_COOKIE_NAME", "auth_session_id")
 SESSION_EXPIRE_DAYS = int(os.getenv("SESSION_EXPIRE_DAYS", "7"))
 
 # Upload settings
-UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "uploads")
+UPLOAD_DIR = BASE_DIR / "uploads"
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(10 * 1024 * 1024)))  # 10MB default
 ALLOWED_EXTENSIONS = {
     'audio': {'wav', 'mp3', 'ogg', 'webm'},

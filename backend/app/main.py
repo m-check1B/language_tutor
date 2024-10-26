@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routers import agents_router, multimedia_router, ws_router, auth_router
 from .database import init_db
 from .config import (
-    ALLOWED_ORIGINS,
+    CORS_SETTINGS,
     LOG_LEVEL,
     LOG_FORMAT,
     LOG_FILE,
@@ -32,10 +32,7 @@ app = FastAPI(title="Language Tutor API")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    **CORS_SETTINGS
 )
 
 # Include routers
@@ -103,27 +100,6 @@ async def health_check():
         "status": "healthy",
         "database": "connected",
         "api_version": "1.0.0"
-    }
-
-# Error handlers
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions"""
-    logger.error(f"HTTP error occurred: {exc.detail}")
-    return {
-        "detail": exc.detail,
-        "status_code": exc.status_code,
-        "path": str(request.url)
-    }
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    """Handle general exceptions"""
-    logger.error(f"Unexpected error occurred: {exc}", exc_info=True)
-    return {
-        "detail": "Internal server error",
-        "status_code": 500,
-        "path": str(request.url)
     }
 
 if __name__ == "__main__":

@@ -1,9 +1,14 @@
-# FastAPI and server
+# Web Framework
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
+
+# Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+PyJWT==2.8.0
+
+# Data Validation
 pydantic[email]==2.6.0
 
 # Database
@@ -12,14 +17,14 @@ alembic==1.13.1
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
 
-# WebSocket support
+# WebSocket
 websockets==12.0
 
-# AI and ML
+# AI/ML
 openai==1.12.0
 anthropic==0.18.1
 
-# Audio processing
+# Speech Recognition
 deepgram-sdk==3.0.0
 
 # Utilities
