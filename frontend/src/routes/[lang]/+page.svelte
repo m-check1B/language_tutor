@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
     import { _ } from 'svelte-i18n';
     import { isLoggedIn } from '$lib/stores';
+    import { page } from '$app/stores';
     import ChatInterface from '$lib/components/ChatInterface.svelte';
     import AgentsManagement from '$lib/components/AgentsManagement.svelte';
 </script>
@@ -28,7 +29,7 @@
                         </p>
                         
                         <a 
-                            href="/login"
+                            href="/{$page.params.lang}/login"
                             class="inline-flex items-center px-8 py-4 text-lg font-medium rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" viewBox="0 0 20 20" fill="currentColor">

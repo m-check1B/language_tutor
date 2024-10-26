@@ -4,7 +4,21 @@
         "description": "Improve your language skills with our AI-powered tutor. Practice conversations, learn grammar, and enhance your vocabulary in a natural way.",
         "getStarted": "Get Started"
     },
+    "auth": {
+        "login": {
+            "title": "Login"
+        },
+        "register": {
+            "title": "Register"
+        },
+        "logout": "Logout"
+    },
+    "theme": {
+        "lightMode": "Light Mode",
+        "darkMode": "Dark Mode"
+    },
     "chat": {
+        "title": "Chat",
         "loginRequired": "Please log in to access the chat",
         "login": "Log In",
         "placeholder": "Type your message...",

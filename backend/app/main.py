@@ -1,7 +1,7 @@
 import logging
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import agents_router, multimedia_router, ws_router, auth_router
+from .routers import agents_router, multimedia_router, ws_router, auth_router, chat_router
 from .database import init_db
 from .config import (
     CORS_SETTINGS,
@@ -35,6 +35,7 @@ app.add_middleware(
 app.include_router(auth_router.router, tags=["Authentication"])
 app.include_router(agents_router.router, tags=["Agents"])
 app.include_router(multimedia_router.router, tags=["Multimedia"])
+app.include_router(chat_router.router, tags=["Chat"])
 if ENABLE_WEBSOCKET:
     app.include_router(ws_router.router, tags=["WebSocket"])
 

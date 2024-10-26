@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import { 
     chatHistory, 
@@ -12,8 +12,13 @@
     transcriptionError,
     responseError,
     selectedVoice,
-    speechSpeed
+    speechSpeed,
+    wsConnection,
+    setupWebSocket,
+    disconnectWebSocket,
+    sendWebSocketMessage
   } from '../stores/stores';
+  import { auth } from '../stores/auth';
 
   // Define the types of variables
   let chatWindow: HTMLDivElement | null = null;
@@ -31,47 +36,18 @@
     if (chatWindow) {
       chatWindow.scrollTop = chatWindow.scrollHeight;
     }
+    setupWebSocket();
   });
 
-  async function sendTextMessage(message: string, agentName: string) {
-    isLoading.set(true);
-    try {
-      const payload = {
-        prompt_text: message,
-        agent_name: agentName
-      };
-
-      const response = await fetch('/api/multimedia/text/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await response.json();
-
-      if (data.response_text) {
-        chatHistory.update(history => {
-          const newHistory = [...history, { text: message, isUser: true }, { text: data.response_text, isUser: false }];
-          sessionStorage.setItem('lastConversation', JSON.stringify(newHistory));
-          return newHistory;
-        });
-      } else {
-        throw new Error("Unexpected response from API");
-      }
-    } catch (error) {
-      handleError(error, responseError);
-    } finally {
-      isLoading.set(false);
-    }
-  }
+  onDestroy(() => {
+    disconnectWebSocket();
+  });
 
   function handleMessage() {
     const message = get(userMessage);
     const activeAgent = get(selectedAgent);
     if (message.trim() && activeAgent && activeAgent.name) {
-      sendTextMessage(message, activeAgent.name);
+      sendWebSocketMessage(message);
       userMessage.set('');
     }
   }
@@ -107,21 +83,7 @@
       const transcription = data.transcription;
 
       if (transcription) {
-        const llmResponse = await fetch('/api/multimedia/text/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            prompt_text: transcription,
-            agent_name: get(selectedAgent).name
-          })
-        });
-
-        const llmData = await llmResponse.json();
-        if (llmData.response_text) {
-          await synthesizeSpeech(llmData.response_text);
-        }
+        sendWebSocketMessage(transcription);
       }
     } catch (error) {
       handleError(error, transcriptionError);
@@ -289,7 +251,7 @@
         const activeAgent = get(selectedAgent);
         if (activeAgent && activeAgent.name) {
           const message = "Starting a new session.";
-          await sendTextMessage(message, activeAgent.name);
+          sendWebSocketMessage(message);
         }
       } else {
         throw new Error('Failed to reset chat session');
@@ -466,48 +428,6 @@
         body: formData
       });
       if (!response.ok) throw new Error('Failed to upload video');
-    } catch (error) {
-      handleError(error, responseError);
-    }
-  }
-
-  async function synthesizeSpeech(text: string) {
-    try {
-      const response = await fetch('/api/multimedia/synthesize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          text: text,
-          voice: get(selectedVoice),
-          speed: get(speechSpeed)
-        })
-      });
-
-      const data = await response.json();
-      if (data.audio_url) {
-        lastAudioUrl = data.audio_url;
-        const audio = new Audio(data.audio_url);
-        audio.onerror = (event) => {
-          if ((event.target as HTMLAudioElement).error?.code === 4) {
-            responseError.set('Audio file not found.');
-          } else {
-            responseError.set('Error playing audio. Please try again.');
-          }
-        };
-        if (audioPlayer) {
-          audioPlayer.pause();
-          audioPlayer = null;
-        }
-        audioPlayer = audio;
-        audioPlayer.play();
-        audioPlayer.onended = () => {
-          audioPlayer = null;
-        };
-      } else {
-        throw new Error("Failed to synthesize speech");
-      }
     } catch (error) {
       handleError(error, responseError);
     }

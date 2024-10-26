@@ -1,5 +1,5 @@
 import { writable, get } from 'svelte/store';
-import { auth, authSessionId } from './auth';
+import { auth } from './auth';
 
 // Chat stores
 export const chatHistory = writable<Array<{ text: string; isUser: boolean; audioUrl?: string }>>([]);
@@ -31,14 +31,6 @@ export const agentSystemPrompt = writable('');
 export const agentProvider = writable('');
 export const agentModel = writable('');
 export const agentVoice = writable('');
-export const agentTemperature = writable(0.7);
-export const agentMaxTokens = writable(1000);
-export const agentTopP = writable(1.0);
-export const agentFrequencyPenalty = writable(0.0);
-export const agentPresencePenalty = writable(0.0);
-export const agentRole = writable('');
-export const agentConnections = writable('');
-export const agentTools = writable('');
 export const errorStore = writable('');
 
 // WebSocket functions
@@ -51,13 +43,14 @@ export function setupWebSocket() {
     if (!authState.token) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/chat/ws/${authState.token}`;
+    const wsUrl = `${protocol}//localhost:8001/api/ws/${authState.token}`;
     
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
         wsConnection.update(state => ({ ...state, socket, isConnected: true }));
         reconnectAttempts = 0;
+        console.log('WebSocket connected');
     };
 
     socket.onmessage = (event) => {
@@ -83,6 +76,7 @@ export function setupWebSocket() {
 
     socket.onclose = () => {
         wsConnection.update(state => ({ ...state, socket: null, isConnected: false }));
+        console.log('WebSocket disconnected');
         
         if (reconnectAttempts < maxReconnectAttempts) {
             setTimeout(() => {
@@ -109,45 +103,28 @@ export function disconnectWebSocket() {
 
 export function sendWebSocketMessage(message: string) {
     const connection = get(wsConnection);
+    const activeAgent = get(selectedAgent);
+    
     if (connection.socket && connection.isConnected) {
-        connection.socket.send(JSON.stringify({
+        chatHistory.update(history => [
+            ...history,
+            { text: message, isUser: true }
+        ]);
+
+        const messageData = {
             type: 'text',
             content: message,
+            agent_name: activeAgent?.name || '',
             ttsSettings: {
                 voice: get(selectedVoice),
                 speed: get(speechSpeed),
                 isSilentMode: get(isSilentMode)
             }
-        }));
-    }
-}
+        };
 
-// Audio functions
-export async function sendAudioData(blob: Blob) {
-    const formData = new FormData();
-    formData.append('audio', blob, 'recording.wav');
-
-    try {
-        const authState = get(auth);
-        formData.append('ttsSettings', JSON.stringify({
-            voice: get(selectedVoice),
-            speed: get(speechSpeed),
-            isSilentMode: get(isSilentMode)
-        }));
-
-        const response = await fetch('/api/chat/audio', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${authState.token}`
-            },
-            body: formData
-        });
-
-        if (!response.ok) throw new Error('Failed to send audio');
-
-        return await response.json();
-    } catch (error) {
-        console.error('Error sending audio:', error);
-        throw error;
+        connection.socket.send(JSON.stringify(messageData));
+    } else {
+        console.error('WebSocket not connected');
+        responseError.set('Connection error. Please try again.');
     }
 }

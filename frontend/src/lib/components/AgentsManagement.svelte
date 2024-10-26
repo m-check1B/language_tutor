@@ -8,22 +8,31 @@
     agentProvider,
     agentModel,
     agentVoice,
-    agentTemperature,
-    agentMaxTokens,
-    agentTopP,
-    agentFrequencyPenalty,
-    agentPresencePenalty,
-    agentRole,
-    agentConnections,
-    agentTools,
-    flashingButtons,
-    errorStore,
-    responseError
+    errorStore
   } from '../stores/stores';
   import { get } from 'svelte/store';
 
   let isLoading: boolean = true;
   const dispatch = createEventDispatcher();
+
+  // Get available options from environment variables
+  const availableProviders = import.meta.env.VITE_AVAILABLE_PROVIDERS.split(',');
+  const openaiModels = import.meta.env.VITE_OPENAI_MODELS.split(',');
+  const anthropicModels = import.meta.env.VITE_ANTHROPIC_MODELS.split(',');
+  const availableVoices = import.meta.env.VITE_AVAILABLE_VOICES.split(',');
+
+  let availableModels: string[] = [];
+
+  // Update available models when provider changes
+  $: {
+    if ($agentProvider === 'openai') {
+      availableModels = openaiModels;
+    } else if ($agentProvider === 'anthropic') {
+      availableModels = anthropicModels;
+    } else {
+      availableModels = [];
+    }
+  }
 
   interface Agent {
     id: number;
@@ -32,17 +41,8 @@
     provider: string;
     model: string;
     voice: string;
-    temperature: number;
-    max_tokens: number;
-    top_p: number;
-    frequency_penalty: number;
-    presence_penalty: number;
-    role: string;
-    connections: string;
-    tools: string;
   }
 
-  // Placeholder functions for now
   async function handleSelectAgent(agent: Agent) {
     selectedAgent.set(agent);
     agentName.set(agent.name);
@@ -50,31 +50,15 @@
     agentProvider.set(agent.provider);
     agentModel.set(agent.model);
     agentVoice.set(agent.voice);
-    agentTemperature.set(agent.temperature);
-    agentMaxTokens.set(agent.max_tokens);
-    agentTopP.set(agent.top_p);
-    agentFrequencyPenalty.set(agent.frequency_penalty);
-    agentPresencePenalty.set(agent.presence_penalty);
-    agentRole.set(agent.role);
-    agentConnections.set(agent.connections);
-    agentTools.set(agent.tools);
   }
 
   function handleCreateAgent() {
     selectedAgent.set(null);
     agentName.set('');
-    agentSystemPrompt.set('');
-    agentProvider.set('');
-    agentModel.set('');
-    agentVoice.set('');
-    agentTemperature.set(0.7);
-    agentMaxTokens.set(1000);
-    agentTopP.set(1.0);
-    agentFrequencyPenalty.set(0.0);
-    agentPresencePenalty.set(0.0);
-    agentRole.set('');
-    agentConnections.set('');
-    agentTools.set('');
+    agentSystemPrompt.set(import.meta.env.VITE_DEFAULT_SYSTEM_PROMPT);
+    agentProvider.set(import.meta.env.VITE_DEFAULT_PROVIDER);
+    agentModel.set(import.meta.env.VITE_DEFAULT_MODEL);
+    agentVoice.set(import.meta.env.VITE_DEFAULT_VOICE);
   }
 
   function handleSaveAgent() {
@@ -84,15 +68,7 @@
       system_prompt: get(agentSystemPrompt),
       provider: get(agentProvider),
       model: get(agentModel),
-      voice: get(agentVoice),
-      temperature: get(agentTemperature),
-      max_tokens: get(agentMaxTokens),
-      top_p: get(agentTopP),
-      frequency_penalty: get(agentFrequencyPenalty),
-      presence_penalty: get(agentPresencePenalty),
-      role: get(agentRole),
-      connections: get(agentConnections),
-      tools: get(agentTools)
+      voice: get(agentVoice)
     };
 
     agents.update(currentAgents => {
@@ -122,34 +98,18 @@
       {
         id: 1,
         name: "Language Tutor",
-        system_prompt: "You are a helpful language tutor",
-        provider: "OpenAI",
-        model: "gpt-4",
-        voice: "en-US-Standard-A",
-        temperature: 0.7,
-        max_tokens: 1000,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-        role: "tutor",
-        connections: "",
-        tools: ""
+        system_prompt: import.meta.env.VITE_DEFAULT_SYSTEM_PROMPT,
+        provider: "openai",
+        model: "gpt-4-turbo-preview",
+        voice: "alloy"
       },
       {
         id: 2,
         name: "Grammar Expert",
         system_prompt: "You are a grammar expert",
-        provider: "OpenAI",
-        model: "gpt-4",
-        voice: "en-US-Standard-B",
-        temperature: 0.7,
-        max_tokens: 1000,
-        top_p: 1.0,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-        role: "expert",
-        connections: "",
-        tools: ""
+        provider: "anthropic",
+        model: "claude-3-opus",
+        voice: "nova"
       }
     ]);
     isLoading = false;
@@ -219,97 +179,33 @@
       ></textarea>
 
       <div class="grid grid-cols-2 gap-4">
-        <input
-          type="text"
+        <select
           bind:value={$agentProvider}
-          placeholder="Provider"
           class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <input
-          type="text"
+        >
+          {#each availableProviders as provider}
+            <option value={provider}>{provider}</option>
+          {/each}
+        </select>
+
+        <select
           bind:value={$agentModel}
-          placeholder="Model"
           class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        >
+          {#each availableModels as model}
+            <option value={model}>{model}</option>
+          {/each}
+        </select>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-        <input
-          type="text"
-          bind:value={$agentVoice}
-          placeholder="Voice"
-          class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <input
-          type="number"
-          bind:value={$agentTemperature}
-          placeholder="Temperature"
-          step="0.1"
-          min="0"
-          max="1"
-          class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div class="grid grid-cols-2 gap-4">
-        <input
-          type="number"
-          bind:value={$agentMaxTokens}
-          placeholder="Max Tokens"
-          class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <input
-          type="number"
-          bind:value={$agentTopP}
-          placeholder="Top P"
-          step="0.1"
-          min="0"
-          max="1"
-          class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div class="grid grid-cols-2 gap-4">
-        <input
-          type="number"
-          bind:value={$agentFrequencyPenalty}
-          placeholder="Frequency Penalty"
-          step="0.1"
-          min="0"
-          max="2"
-          class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <input
-          type="number"
-          bind:value={$agentPresencePenalty}
-          placeholder="Presence Penalty"
-          step="0.1"
-          min="0"
-          max="2"
-          class="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <input
-        type="text"
-        bind:value={$agentRole}
-        placeholder="Role"
+      <select
+        bind:value={$agentVoice}
         class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <input
-        type="text"
-        bind:value={$agentConnections}
-        placeholder="Connections"
-        class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <input
-        type="text"
-        bind:value={$agentTools}
-        placeholder="Tools"
-        class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
+      >
+        {#each availableVoices as voice}
+          <option value={voice}>{voice}</option>
+        {/each}
+      </select>
     </div>
   {/if}
 </div>

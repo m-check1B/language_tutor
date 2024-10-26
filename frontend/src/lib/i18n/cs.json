@@ -1,10 +1,24 @@
 {
     "home": {
         "title": "Vítejte v Language Tutor",
-        "description": "Zlepšete své jazykové dovednosti s naším AI tutorem. Procvičujte konverzaci, učte se gramatiku a rozšiřujte svou slovní zásobu přirozeným způsobem.",
+        "description": "Zlepšete své jazykové dovednosti s naším AI tutorem. Procvičujte konverzace, učte se gramatiku a rozšiřujte svou slovní zásobu přirozeným způsobem.",
         "getStarted": "Začít"
     },
+    "auth": {
+        "login": {
+            "title": "Přihlášení"
+        },
+        "register": {
+            "title": "Registrace"
+        },
+        "logout": "Odhlásit"
+    },
+    "theme": {
+        "lightMode": "Světlý režim",
+        "darkMode": "Tmavý režim"
+    },
     "chat": {
+        "title": "Chat",
         "loginRequired": "Pro přístup k chatu se prosím přihlaste",
         "login": "Přihlásit se",
         "placeholder": "Napište zprávu...",
@@ -14,8 +28,8 @@
         "stopRecording": "Zastavit nahrávání",
         "recordVideo": "Nahrát video",
         "takePicture": "Vyfotit",
-        "sayItAgain": "Zopakovat",
-        "stopSpeaking": "Zastavit mluvení",
+        "sayItAgain": "Řekni to znovu",
+        "stopSpeaking": "Přestat mluvit",
         "uploadText": "Textový soubor",
         "uploadPdf": "PDF soubor",
         "uploadVideo": "Video soubor"

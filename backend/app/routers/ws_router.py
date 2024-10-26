@@ -52,7 +52,7 @@ class ConnectionManager:
             logger.error(f"No active WebSocket connection found for user {user_id}")
 
 manager = ConnectionManager()
-router = APIRouter()
+router = APIRouter(prefix="/api")  # Add prefix here
 
 @router.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str, db = Depends(get_db)):

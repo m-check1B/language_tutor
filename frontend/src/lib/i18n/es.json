@@ -1,10 +1,24 @@
 {
     "home": {
         "title": "Bienvenido a Language Tutor",
-        "description": "Mejora tus habilidades lingüísticas con nuestro tutor impulsado por IA. Practica conversaciones, aprende gramática y mejora tu vocabulario de manera natural.",
+        "description": "Mejora tus habilidades lingüísticas con nuestro tutor impulsado por IA. Practica conversaciones, aprende gramática y mejora tu vocabulario de forma natural.",
         "getStarted": "Comenzar"
     },
+    "auth": {
+        "login": {
+            "title": "Iniciar sesión"
+        },
+        "register": {
+            "title": "Registrarse"
+        },
+        "logout": "Cerrar sesión"
+    },
+    "theme": {
+        "lightMode": "Modo claro",
+        "darkMode": "Modo oscuro"
+    },
     "chat": {
+        "title": "Chat",
         "loginRequired": "Por favor, inicia sesión para acceder al chat",
         "login": "Iniciar sesión",
         "placeholder": "Escribe tu mensaje...",
@@ -14,8 +28,8 @@
         "stopRecording": "Detener grabación",
         "recordVideo": "Grabar video",
         "takePicture": "Tomar foto",
-        "sayItAgain": "Repetir",
-        "stopSpeaking": "Detener voz",
+        "sayItAgain": "Repítelo",
+        "stopSpeaking": "Dejar de hablar",
         "uploadText": "Archivo de texto",
         "uploadPdf": "Archivo PDF",
         "uploadVideo": "Archivo de video"
@@ -32,7 +46,7 @@
         "model": "Modelo",
         "voice": "Voz",
         "temperature": "Temperatura",
-        "maxTokens": "Máx. tokens",
+        "maxTokens": "Máximo de tokens",
         "topP": "Top P",
         "frequencyPenalty": "Penalización de frecuencia",
         "presencePenalty": "Penalización de presencia",

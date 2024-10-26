@@ -87,12 +87,12 @@ async def login(
             detail="Could not create session"
         )
     
-    # Set session cookie
+    # Set session cookie - don't use secure in development
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_id,
         httponly=True,
-        secure=True,
+        secure=False,  # Changed to False for development
         samesite="lax",
         max_age=60 * 60 * 24 * 7  # 7 days
     )
@@ -119,7 +119,7 @@ async def logout(
     response.delete_cookie(
         key=SESSION_COOKIE_NAME,
         httponly=True,
-        secure=True,
+        secure=False,  # Changed to False for development
         samesite="lax"
     )
     
